@@ -128,5 +128,12 @@
           '';
         };
       };
+
+      # System-agnostic overlay so nix.dotfiles (and any consumer) can add
+      # `today` to its package set via `inputs.today.overlays.default` (the
+      # tatr pattern), then `home.packages = [pkgs.today]`.
+      flake.overlays.default = final: _prev: {
+        today = self.packages.${final.stdenv.hostPlatform.system}.today;
+      };
     };
 }
