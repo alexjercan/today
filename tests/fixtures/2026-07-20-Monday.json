@@ -1,0 +1,28 @@
+{
+  "date": "2026-07-20-Monday",
+  "file": "/home/alex/personal/the-den/Daily/2026-07-20-Monday.md",
+  "title": "Monday, July 20, 2026",
+  "habits": [
+    {
+      "name": "📕 Learn",
+      "done": false
+    },
+    {
+      "name": "💪 Gym",
+      "done": false
+    },
+    {
+      "name": "🥕 Track Macros",
+      "done": false
+    }
+  ],
+  "tasks": [],
+  "tomorrow": [],
+  "macros": {
+    "protein": 0.00,
+    "carbs": 0.00,
+    "fat": 0.00,
+    "calories": 0
+  },
+  "weight": null
+}

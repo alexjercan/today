@@ -1,0 +1,39 @@
+{
+  "date": "2026-07-18-Saturday",
+  "file": "/home/alex/personal/the-den/Daily/2026-07-18-Saturday.md",
+  "title": "Saturday, July 18, 2026",
+  "habits": [
+    {
+      "name": "📕 Learn",
+      "done": true
+    },
+    {
+      "name": "💪 Gym",
+      "done": true
+    },
+    {
+      "name": "🥕 Track Macros",
+      "done": false
+    }
+  ],
+  "tasks": [
+    {
+      "index": 1,
+      "text": "let's implement more, but also pause bruh",
+      "done": true
+    }
+  ],
+  "tomorrow": [
+    {
+      "index": 1,
+      "text": "start working on a dashboard that use claude code to manage my daily notes and make my life easier via IDK a chat service or an app or something that I can use;"
+    }
+  ],
+  "macros": {
+    "protein": 0.00,
+    "carbs": 0.00,
+    "fat": 0.00,
+    "calories": 0
+  },
+  "weight": null
+}
