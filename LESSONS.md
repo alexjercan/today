@@ -28,6 +28,10 @@ One line per recurring lesson; /compound appends or bumps counts.
   span FORMATTING axes (single vs double-digit day, empty vs populated, CRLF/LF,
   first-of-month), not just content; consecutive real days share formatting and
   hid a zero-padding title bug for two tasks. 20260720-142204
+- `pipefail-on-passfail-commands` (x1): for any command whose exit code is the
+  signal (build/test/lint/`uv lock --check`), run it bare or `set -o pipefail`
+  before reading a piped tail - `cmd | tail` reports tail's rc 0 and hid a stale
+  lock. 20260720-142205
 
 ## Pending promotions (3+ occurrences, user decides)
 
