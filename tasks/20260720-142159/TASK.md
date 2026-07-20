@@ -1,6 +1,6 @@
 # today: task mutations + safe write-back foundation (task add/done/rm, --tomorrow)
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 50
 - TAGS: feature,cli
 

@@ -15,7 +15,8 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from today.model import parse_day
+from today import edit
+from today.model import Task, TomorrowTask, parse_day
 
 DEFAULT_DEN = Path.home() / "personal" / "the-den"
 DEFAULT_EDITOR = "nvim"
@@ -120,9 +121,88 @@ def _cmd_edit(args: argparse.Namespace) -> int:
         return 1
 
 
+def _print_tasks(items: list[Task] | list[TomorrowTask]) -> None:
+    """Human-readable listing of a Today/Tomorrow slice after a mutation."""
+    if not items:
+        print("(empty)")
+        return
+    for item in items:
+        if isinstance(item, Task):
+            box = "[x]" if item.done else "[ ]"
+            print(f"{item.index}. {box} {item.text}")
+        else:
+            print(f"{item.index}. {item.text}")
+
+
+def _cmd_task(args: argparse.Namespace) -> int:
+    """add/done/rm a task in today's (or --tomorrow's) list, then report it."""
+    den = resolve_den(args.den)
+    path = ensure_entry(den, args.offset)
+    text = path.read_text(encoding="utf-8")
+    tomorrow = getattr(args, "tomorrow", False)
+    marker = edit.TOMORROW if tomorrow else edit.TODAY
+
+    try:
+        if args.action == "add":
+            updated = edit.add_item(text, args.text, marker)
+        elif args.action == "rm":
+            updated = edit.remove_item(text, args.index, marker)
+        else:  # done - today-only, toggles the checkbox
+            updated = edit.toggle_item(text, args.index)
+    except IndexError as exc:
+        print(f"today task: {exc}", file=sys.stderr)
+        return 1
+
+    if updated != text:
+        edit.atomic_write(path, updated)
+
+    day = parse_day(path)
+    slice_: list[Task] | list[TomorrowTask] = day.tomorrow if tomorrow else day.tasks
+    if args.json:
+        print(json.dumps([t.to_dict() for t in slice_], ensure_ascii=False))
+    else:
+        _print_tasks(slice_)
+    return 0
+
+
 def _cmd_planned(args: argparse.Namespace) -> int:
     print(f"`today {args._cmd}` {_PLANNED}", file=sys.stderr)
     return 2
+
+
+def _add_task_parser(sub: argparse._SubParsersAction) -> None:
+    """`today task {add,done,rm}` - mutate the Today (or --tomorrow) list."""
+    task = sub.add_parser(
+        "task", help="add/complete/remove tasks (today or --tomorrow)"
+    )
+    actions = task.add_subparsers(dest="action", required=True)
+
+    add = actions.add_parser("add", help="add a task to Today (or --tomorrow)")
+    add.add_argument("text", help="the task text")
+    add.add_argument(
+        "--tomorrow", action="store_true", help="add to the Tomorrow list instead"
+    )
+    add.add_argument(
+        "--json", action="store_true", help="print the updated list as JSON"
+    )
+    add.set_defaults(func=_cmd_task)
+
+    done = actions.add_parser("done", help="toggle a Today task's checkbox by index")
+    done.add_argument("index", type=int, help="1-based task index (from `show --json`)")
+    done.add_argument(
+        "--json", action="store_true", help="print the updated list as JSON"
+    )
+    done.set_defaults(func=_cmd_task)
+
+    rm = actions.add_parser("rm", help="remove a task from Today (or --tomorrow)")
+    rm.add_argument("index", type=int, help="1-based task index (from `show --json`)")
+    rm.add_argument(
+        "--tomorrow", action="store_true", help="remove from the Tomorrow list instead"
+    )
+    rm.add_argument(
+        "--json", action="store_true", help="print the updated list as JSON"
+    )
+    rm.set_defaults(func=_cmd_task)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -152,9 +232,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="machine-readable output")
     p.set_defaults(func=_cmd_show)
 
+    _add_task_parser(sub)
+
     # Mutation surface (scaffolded; the parity port is tracked in tasks/).
     for name, help_ in [
-        ("task", "add/complete/remove tasks (today or --tomorrow)"),
         ("habit", "toggle/list habits"),
         ("weight", "log or show weight"),
         ("macros", "add a macros entry (what,protein,carbs,fat)"),
