@@ -44,7 +44,7 @@ current tests.
   - Response: Fixed. Added a best-effort directory fsync after `os.replace`
     (guarded for platforms that cannot fsync a directory).
 
-- [x] R1.5 (MAJOR, tests) No test exercises a mixed list (a plain bullet
+- [x] R1.5 (MAJOR) tests: No test exercises a mixed list (a plain bullet
   interleaved with Today checkboxes) - the trickiest part of the index contract.
   - Response: Added `test_mixed_list_index_matches_parser`, which asserts the
     physical line `task done N` / `task rm N` touches is exactly the item

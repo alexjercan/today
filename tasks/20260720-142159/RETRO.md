@@ -49,7 +49,7 @@ See TASK.md for what/why and REVIEW.md for the findings. Process notes only.
 
 ## Action items
 
-- [x] Proposed ledger entries in docs/LESSONS.md (nix-flake-untracked-eval,
+- [x] Proposed ledger entries in LESSONS.md (nix-flake-untracked-eval,
   byte-preservation-needs-adversarial-tests, independent-review-blindspot).
 - Note: the root of the lock-file pain is now resolved upstream - master commit
   3e9be36 tracks `uv.lock`/`flake.lock`, so future sprout worktrees get them

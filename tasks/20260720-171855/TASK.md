@@ -1,8 +1,8 @@
 # Adopt flow v2: root LESSONS.md, clean tatr check, AGENTS.md flow section
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 90
-- TAGS: chore,process
+- TAGS: chore, process
 
 ## Story
 
@@ -13,7 +13,7 @@ six-repo adoption goal (umbrella: nix.dotfiles tasks/20260720-171807).
 
 ## Steps
 
-- [ ] Ledger at the root: move docs/LESSONS.md to LESSONS.md (git mv) - or
+- [x] Ledger at the root: move docs/LESSONS.md to LESSONS.md (git mv) - or
       create it from the lessons-skill format if the repo has none - then
       run the doc-surface sweep for every reference to the old path
       (AGENTS.md, README, scripts, CI guards, wiki pages) and update them.
@@ -21,7 +21,7 @@ six-repo adoption goal (umbrella: nix.dotfiles tasks/20260720-171807).
       "## Pending promotions (3+ occurrences, user decides)" section;
       move unpromoted (x3)+ entries there; keep existing PROMOTED/absorbed
       annotations as they are.
-- [ ] Fix tatr check findings best-effort, assuming recorded work was done
+- [x] Fix tatr check findings best-effort, assuming recorded work was done
       properly where the record supports it:
       - closed-unchecked: tick Steps boxes whose close-out notes or landed
         commits evidence the work shipped; genuinely unshipped steps stay
@@ -34,14 +34,14 @@ six-repo adoption goal (umbrella: nix.dotfiles tasks/20260720-171807).
         (LOW -> MINOR, NOTE/INFO/OBSERVATION -> NIT, FIXED -> the severity
         it had, keeping any "fixed in-review" note in the text), recording
         the mapping in the close-out.
-- [ ] AGENTS.md: add or refresh a "Development flow" section stating: /flow
+- [x] AGENTS.md: add or refresh a "Development flow" section stating: /flow
       drives development here (plan/work/review/compound via tatr tasks,
       sprout worktrees, out-of-context round-1 reviews, DoD proofs with
       test:/cmd:/manual: notation); LESSONS.md at the repo root is the
       lessons ledger, read before starting any task; `tatr check` (plus
       `--ledger LESSONS.md`) is the conformance gate. Keep the section
       short; do not restructure the rest of the file.
-- [ ] Verify: tatr check exit 0 (or residue listed in the close-out),
+- [x] Verify: tatr check exit 0 (or residue listed in the close-out),
       tatr check --ledger LESSONS.md exit 0, and the repo's own check
       suite still green.
 
@@ -61,3 +61,39 @@ six-repo adoption goal (umbrella: nix.dotfiles tasks/20260720-171807).
 - Preserve history honestly: normalizations keep meaning; ticks record
   verifiably shipped work only (linter-adoption cleanup, per the precedent
   in tatr's own 20260720-152503).
+
+## Close-out
+
+Changes:
+- git mv docs/LESSONS.md -> LESSONS.md (docs/ removed; it held only the
+  ledger). The ledger already had the "## Pending promotions (3+ occurrences,
+  user decides)" section and no unpromoted (x3)+ entries, so no content
+  reshuffle was needed.
+- Doc-surface sweep: tasks/20260720-142159/RETRO.md action item updated from
+  docs/LESSONS.md to LESSONS.md. AGENTS.md, README.md, scripts, and CI had no
+  references to the old path.
+- tatr check severity fix (the mapping applied): tasks/20260720-142159/REVIEW.md
+  R1.5 "(MAJOR, tests)" -> "(MAJOR) tests:" - severity was genuinely MAJOR
+  with a "tests" category qualifier baked into the tag; the qualifier moved
+  into the finding text, meaning unchanged. That was the only finding.
+- AGENTS.md: added a short "## Development flow" section (/flow, tatr tasks,
+  sprout worktrees, out-of-context round-1 reviews, DoD proofs with
+  test:/cmd:/manual:, root LESSONS.md ledger read before any task,
+  /home/alex/personal/tatr/tatr check + --ledger LESSONS.md as the gate).
+
+Residue: none. All findings were honestly mappable; no closed-unchecked or
+closed-not-approved findings existed.
+
+Check results:
+- /home/alex/personal/tatr/tatr check -> exit 0
+- /home/alex/personal/tatr/tatr check --ledger LESSONS.md -> exit 0
+- DoD ledger cmd: test -f LESSONS.md and test ! -f docs/LESSONS.md both pass.
+  The "docs/LESSONS" grep now matches only this task's own TASK.md (the step
+  text describing the move and the DoD command string itself) - inherently
+  self-matching spec text, not stale references.
+- Repo check suite: checks.ruff and checks.mypy build green; `nix develop -c
+  pytest -q` -> 30 passed. Pre-existing failure (NOT fixed, per spec): the
+  checks.pytest flake derivation fails with "ModuleNotFoundError: No module
+  named 'today'" in the nix sandbox - identical failure on the clean base
+  commit 5aa6805, so unrelated to this change; the check derivation runs
+  pytest without installing/pointing at the package.

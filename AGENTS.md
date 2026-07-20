@@ -19,3 +19,12 @@ only; this CLI is the sole reader/writer of its markdown.
 - Stdlib only (no runtime deps). ruff + mypy + pytest all green (`nix flake check`).
 - Records live in `tasks/` (tatr). After meaningful changes, write a short retro
   note there: what changed, why, and any gotcha.
+
+## Development flow
+- /flow drives development here: plan/work/review/compound via tatr tasks,
+  sprout worktrees, out-of-context round-1 reviews, and DoD proofs using
+  test:/cmd:/manual: notation.
+- `LESSONS.md` at the repo root is the lessons ledger; read it before starting
+  any task.
+- `/home/alex/personal/tatr/tatr check` (plus `--ledger LESSONS.md`) is the
+  conformance gate.
