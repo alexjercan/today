@@ -230,6 +230,47 @@ def test_add_macros_row_no_macros_section_raises() -> None:
     raise AssertionError("expected LookupError when there is no Macros section")
 
 
+def test_add_note_appends_plain_and_tagged() -> None:
+    text = "# D\n\n### 📝 Notes\n\n"
+    out = edit.add_note(text, "buy milk")
+    assert out == "# D\n\n### 📝 Notes\n\nbuy milk\n"
+    out2 = edit.add_note(out, "ship it", tag="work")
+    assert out2 == "# D\n\n### 📝 Notes\n\nbuy milk\n\nship it note :: work\n"
+
+
+def test_iter_notes_splits_tag_and_skips_structure() -> None:
+    text = (
+        "# D\n\n### 📝 Notes\n\n"
+        "Today\n- [ ] a task\n\n"
+        "weight :: 75.0 Kg\n\n"
+        "plain note\n\n"
+        "tagged note note :: work\n\n"
+        "Tomorrow\n- later\n"
+    )
+    assert edit.iter_notes(text) == [
+        ("plain note", None),
+        ("tagged note", "work"),
+    ]
+
+
+def test_iter_notes_empty_when_only_structure() -> None:
+    text = "# D\n\n### 📝 Notes\n\nToday\n- [ ] a\n\nweight :: 70.0 Kg\n"
+    assert edit.iter_notes(text) == []
+
+
+def test_iter_notes_excludes_every_today_block_not_just_the_first() -> None:
+    """A hand-edited second Today block must not leak its marker/items as notes."""
+    text = "# D\n\n### 📝 Notes\n\nToday\n- [ ] a\n\na real note\n\nToday\n- [ ] b\n"
+    assert edit.iter_notes(text) == [("a real note", None)]
+
+
+def test_add_note_preserves_crlf() -> None:
+    text = "# D\r\n\r\n### 📝 Notes\r\n\r\nexisting\r\n"
+    out = edit.add_note(text, "new one", tag="x")
+    assert out == "# D\r\n\r\n### 📝 Notes\r\n\r\nexisting\r\n\r\nnew one note :: x\r\n"
+    assert "\n" not in out.replace("\r\n", "")  # no stray lone LFs
+
+
 def test_atomic_write_replaces_the_file(tmp_path: Path) -> None:
     path = tmp_path / "entry.md"
     path.write_text("old\n", encoding="utf-8")

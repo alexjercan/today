@@ -22,7 +22,6 @@ from today.model import Habit, Task, TomorrowTask, parse_day
 
 DEFAULT_DEN = Path.home() / "personal" / "the-den"
 DEFAULT_EDITOR = "nvim"
-_PLANNED = "not implemented yet - tracked in this repo's tasks/ (parity port)."
 
 
 def resolve_den(arg: str | None) -> Path:
@@ -348,9 +347,54 @@ def _cmd_macros(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_planned(args: argparse.Namespace) -> int:
-    print(f"`today {args._cmd}` {_PLANNED}", file=sys.stderr)
-    return 2
+def _print_notes(notes: list[tuple[str, str | None]]) -> None:
+    """Human-readable listing of notes, tag first when present."""
+    if not notes:
+        print("(no notes)")
+        return
+    for text, tag in notes:
+        print(f"[{tag}] {text}" if tag else text)
+
+
+def _cmd_note(args: argparse.Namespace) -> int:
+    """Append a note (``today note add <text> [--tag T]``) or list/search notes
+    (``today note list [--tag T]``)."""
+    den = resolve_den(args.den)
+    path = ensure_entry(den, args.offset)
+
+    if args.naction == "add":
+        if not args.text.strip():
+            print("note: note text must not be empty", file=sys.stderr)
+            return 1
+        tag = None
+        if args.tag is not None:
+            if len(args.tag.split()) != 1:
+                print("note: tag must be a single word", file=sys.stderr)
+                return 1
+            tag = args.tag.strip()
+            # Keep the appended `note :: <tag>` marker the single source of
+            # truth (writer-honors-reader): a text that already carries a marker
+            # would make iter_notes read the wrong tag back.
+            if re.search(r"note\s*::", args.text, re.IGNORECASE):
+                print(
+                    "note: text may not contain a 'note ::' marker with --tag",
+                    file=sys.stderr,
+                )
+                return 1
+        text = path.read_text(encoding="utf-8")
+        updated = edit.add_note(text, args.text, tag)
+        if updated != text:
+            edit.atomic_write(path, updated)
+
+    notes = edit.iter_notes(path.read_text(encoding="utf-8"))
+    if args.naction == "list" and args.tag is not None:
+        wanted = args.tag.strip()
+        notes = [(t, g) for (t, g) in notes if g == wanted]
+    if args.json:
+        print(json.dumps([{"text": t, "tag": g} for t, g in notes], ensure_ascii=False))
+    else:
+        _print_notes(notes)
+    return 0
 
 
 def _add_task_parser(sub: argparse._SubParsersAction) -> None:
@@ -449,6 +493,23 @@ def _add_macros_parser(sub: argparse._SubParsersAction) -> None:
     add.set_defaults(func=_cmd_macros)
 
 
+def _add_note_parser(sub: argparse._SubParsersAction) -> None:
+    """`today note {add,list}` - append a note, or list/search notes by tag."""
+    note = sub.add_parser("note", help="add/list notes (with tags)")
+    actions = note.add_subparsers(dest="naction", required=True)
+
+    add = actions.add_parser("add", help="append a note to the Notes section")
+    add.add_argument("text", help="the note text")
+    add.add_argument("--tag", help="attach a note :: <tag> marker (a single word)")
+    add.add_argument("--json", action="store_true", help="print the notes as JSON")
+    add.set_defaults(func=_cmd_note)
+
+    lst = actions.add_parser("list", help="list notes, or filter by --tag")
+    lst.add_argument("--tag", help="only notes carrying this note :: <tag>")
+    lst.add_argument("--json", action="store_true", help="print the notes as JSON")
+    lst.set_defaults(func=_cmd_note)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="today",
@@ -480,13 +541,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_habit_parser(sub)
     _add_weight_parser(sub)
     _add_macros_parser(sub)
-
-    # Mutation surface (scaffolded; the parity port is tracked in tasks/).
-    for name, help_ in [
-        ("note", "add/list notes (with tags)"),
-    ]:
-        p = sub.add_parser(name, help=help_)
-        p.set_defaults(func=_cmd_planned, _cmd=name)
+    _add_note_parser(sub)
 
     return parser
 

@@ -70,11 +70,102 @@ def test_carry_forward_turns_tomorrow_into_today(tmp_path: Path) -> None:
     assert [t.text for t in day.tasks] == ["ship the thing"]
 
 
-def test_mutation_subcommands_are_scaffolded(tmp_path: Path, capsys) -> None:
+def test_note_add_then_list_roundtrips(tmp_path: Path, capsys) -> None:
     den = _den(tmp_path)
-    rc = main(["--den", str(den), "note"])
-    assert rc == 2  # planned, exits non-zero with a clear message
-    assert "not implemented yet" in capsys.readouterr().err
+    main(["--den", str(den), "note", "add", "buy milk"])
+    capsys.readouterr()
+    rc = main(["--den", str(den), "note", "list", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out == [{"text": "buy milk", "tag": None}]
+
+
+def test_note_add_with_tag_and_filter(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "note", "add", "ship release", "--tag", "work"])
+    main(["--den", str(den), "note", "add", "call mom", "--tag", "home"])
+    main(["--den", str(den), "note", "add", "untagged thing"])
+    capsys.readouterr()
+    # Filter by tag.
+    rc = main(["--den", str(den), "note", "list", "--tag", "work", "--json"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == [
+        {"text": "ship release", "tag": "work"}
+    ]
+    # Listing all yields every note, tag split out.
+    main(["--den", str(den), "note", "list", "--json"])
+    allnotes = json.loads(capsys.readouterr().out)
+    assert allnotes == [
+        {"text": "ship release", "tag": "work"},
+        {"text": "call mom", "tag": "home"},
+        {"text": "untagged thing", "tag": None},
+    ]
+
+
+def test_note_list_does_not_include_tasks_or_weight(tmp_path: Path, capsys) -> None:
+    """Notes listing must ignore the Today/Tomorrow lists and the weight line."""
+    den = _den(tmp_path)
+    main(["--den", str(den), "task", "add", "a today task"])
+    main(["--den", str(den), "task", "add", "a tomorrow task", "--tomorrow"])
+    main(["--den", str(den), "weight", "75"])
+    main(["--den", str(den), "note", "add", "the only note"])
+    capsys.readouterr()
+    main(["--den", str(den), "note", "list", "--json"])
+    out = json.loads(capsys.readouterr().out)
+    assert out == [{"text": "the only note", "tag": None}]
+
+
+def test_note_add_rejects_multiword_tag(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    before = entry_path(den, 0).read_text()
+    capsys.readouterr()
+    rc = main(["--den", str(den), "note", "add", "x", "--tag", "two words"])
+    assert rc == 1
+    assert "single word" in capsys.readouterr().err
+    assert entry_path(den, 0).read_text() == before  # file untouched
+
+
+def test_note_add_rejects_marker_in_text_with_tag(tmp_path: Path, capsys) -> None:
+    """With --tag the appended marker must be unambiguous, so a text already
+    carrying a 'note ::' marker is rejected."""
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    capsys.readouterr()
+    rc = main(
+        ["--den", str(den), "note", "add", "sneaky note :: home", "--tag", "work"]
+    )
+    assert rc == 1
+
+
+def test_note_untagged_text_can_carry_inline_marker(tmp_path: Path, capsys) -> None:
+    """Without --tag a text carrying its own `note :: tag` is stored verbatim and
+    read back with that tag split out (the old daily -n convention)."""
+    den = _den(tmp_path)
+    main(["--den", str(den), "note", "add", "remember note :: home the address"])
+    capsys.readouterr()
+    main(["--den", str(den), "note", "list", "--tag", "home", "--json"])
+    assert json.loads(capsys.readouterr().out) == [
+        {"text": "remember the address", "tag": "home"}
+    ]
+
+
+def test_note_add_rejects_empty_text(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    before = entry_path(den, 0).read_text()
+    capsys.readouterr()
+    rc = main(["--den", str(den), "note", "add", "   ", "--tag", "work"])
+    assert rc == 1
+    assert "must not be empty" in capsys.readouterr().err
+    assert entry_path(den, 0).read_text() == before  # file untouched
+
+
+def test_note_list_empty_on_fresh_entry(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    rc = main(["--den", str(den), "note", "list", "--json"])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out) == []
 
 
 def test_macros_add_appends_and_aggregates(tmp_path: Path, capsys) -> None:

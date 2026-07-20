@@ -359,3 +359,72 @@ def add_macros_row(text: str, row: str) -> str:
         lines[content_end - 1] += newline
     lines.insert(content_end, row + newline)
     return _join(lines)
+
+
+# A note's optional tag marker: `note :: <tag>` (tag is a single token). Matches
+# the old `daily -n <tag>` convention so a note can be filtered by tag.
+_NOTE_TAG = re.compile(r"\s*note\s*::\s*(\S+)", re.IGNORECASE)
+
+
+def _structural_note_lines(lines: list[str]) -> set[int]:
+    """Line indices in the document that are Notes-section *structure*, not notes.
+
+    A "note" is freeform Notes-section prose; the Today/Tomorrow marker lines,
+    the bullets belonging to those two lists, and any ``weight ::`` line are
+    structure and must be excluded from note listing.
+    """
+    structural: set[int] = set()
+    markers = {TODAY.strip().lower(), TOMORROW.strip().lower()}
+    for i in range(_body_start(lines), len(lines)):
+        if _WEIGHT_LINE.match(lines[i]):
+            structural.add(i)
+            continue
+        # Every Today/Tomorrow marker (not just the first) plus its list, so a
+        # hand-edited file with a second block does not leak markers as notes.
+        if lines[i].strip().lower() in markers:
+            structural.add(i)
+            structural.update(_item_lines(lines, i))
+    return structural
+
+
+def add_note(text: str, note: str, tag: str | None = None) -> str:
+    """Return document ``text`` with ``note`` appended to the Notes section.
+
+    The note is stored as a single line at the end of the Notes body, one blank
+    line below the preceding content (matching the old ``daily --notes-entry``).
+    A ``tag`` is carried as a trailing ``note :: <tag>`` marker so it can be
+    filtered later; without a tag the note text is stored verbatim.
+    """
+    lines = text.splitlines(keepends=True)
+    newline = _newline(lines)
+    line = f"{note} note :: {tag}" if tag else note
+    _append_notes_block(lines, [line + newline])
+    return _join(lines)
+
+
+def iter_notes(text: str) -> list[tuple[str, str | None]]:
+    """The freeform notes in the Notes section, as ``(text, tag)`` in file order.
+
+    A note is any non-blank Notes-body line that is not structure (see
+    ``_structural_note_lines``). If the line carries a ``note :: <tag>`` marker
+    the tag is split out and removed from the returned text; otherwise the tag
+    is ``None`` and the text is the whole line.
+    """
+    lines = text.splitlines(keepends=True)
+    structural = _structural_note_lines(lines)
+    start, end = _notes_region(lines)
+    notes: list[tuple[str, str | None]] = []
+    for i in range(start, end):
+        if i in structural:
+            continue
+        raw = lines[i].strip()
+        if not raw:
+            continue
+        match = _NOTE_TAG.search(raw)
+        if match:
+            tag = match.group(1)
+            body = (raw[: match.start()] + raw[match.end() :]).strip()
+            notes.append((body, tag))
+        else:
+            notes.append((raw, None))
+    return notes

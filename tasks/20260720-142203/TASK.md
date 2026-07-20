@@ -1,8 +1,8 @@
 # today: notes with tags + search (note add/list --tag)
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 40
-- TAGS: feature,cli
+- TAGS: feature, cli
 
 ## Goal
 
