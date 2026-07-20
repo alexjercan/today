@@ -24,6 +24,10 @@ One line per recurring lesson; /compound appends or bumps counts.
   a downstream aggregate, make the reader total so file contents never crash it.
   Pin with a write->parse round-trip over adversarial inputs. 20260720-142201,
   20260720-142202
+- `sample-fixtures-span-formatting-axes` (x1): pick golden/sample fixtures to
+  span FORMATTING axes (single vs double-digit day, empty vs populated, CRLF/LF,
+  first-of-month), not just content; consecutive real days share formatting and
+  hid a zero-padding title bug for two tasks. 20260720-142204
 
 ## Pending promotions (3+ occurrences, user decides)
 
