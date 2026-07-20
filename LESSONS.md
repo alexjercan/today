@@ -12,6 +12,9 @@ One line per recurring lesson; /compound appends or bumps counts.
   force-staging untracked lock files for `nix develop` leaves them in the index
   where a bare commit sweeps them, and `git stash -u` wipes them; scope-commit
   or unstage after, and never stash them. 20260720-142159
+- `devshell-env-not-in-checks` (x1): env a tool needs that is set only in the
+  devShell shellHook (e.g. `REPO_ROOT` for the editable `.pth`) is absent in
+  check/CI/`nix build` sandboxes; replicate it in `mkCheck`. 20260720-172833
 
 ## Pending promotions (3+ occurrences, user decides)
 
