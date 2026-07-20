@@ -177,14 +177,14 @@ def _notes_region(lines: list[str]) -> tuple[int, int]:
     return region if region is not None else (len(lines), len(lines))
 
 
-def _insert_section(lines: list[str], marker: str, bullet: str) -> None:
-    """Create a missing ``marker`` list at the end of the Notes section body.
+def _append_notes_block(lines: list[str], block: list[str]) -> None:
+    """Append ``block`` (already-terminated lines) at the end of the Notes body.
 
-    Bounded to the Notes section so the new list never lands under a later
-    section. Separated from the preceding content by exactly one blank line: the
-    section's existing blank spacer is reused when Notes is the last section (so
-    template output stays clean), otherwise a blank is added and the blank before
-    the following header is preserved.
+    Bounded to the Notes section so the block never lands under a later section.
+    Separated from the preceding content by exactly one blank line: the section's
+    existing blank spacer is reused when Notes is the last section (so template
+    output stays clean), otherwise a blank is added and the blank before the
+    following header is preserved.
     """
     newline = _newline(lines)
     start, end = _notes_region(lines)
@@ -192,7 +192,6 @@ def _insert_section(lines: list[str], marker: str, bullet: str) -> None:
     for i in range(start, end):
         if lines[i].strip() != "":
             content_end = i + 1
-    block = [marker + newline, bullet + newline]
 
     reuse_spacer = (
         content_end < end and lines[content_end].strip() == "" and end == len(lines)
@@ -207,6 +206,12 @@ def _insert_section(lines: list[str], marker: str, bullet: str) -> None:
     if insert_at > 0 and not lines[insert_at - 1].endswith(("\n", "\r")):
         lines[insert_at - 1] += newline
     lines[insert_at:insert_at] = block
+
+
+def _insert_section(lines: list[str], marker: str, bullet: str) -> None:
+    """Create a missing ``marker`` list at the end of the Notes section body."""
+    newline = _newline(lines)
+    _append_notes_block(lines, [marker + newline, bullet + newline])
 
 
 def add_item(text: str, item: str, marker: str) -> str:
@@ -295,3 +300,37 @@ def toggle_habit(text: str, name: str) -> str:
             lines[i] = _toggle_checkbox(lines[i])
             return _join(lines)
     raise KeyError(name)
+
+
+_WEIGHT_LINE = re.compile(r"^\s*weight\s*::", re.IGNORECASE)
+
+
+def _terminator(line: str) -> str:
+    """The line's own newline terminator ("" if it has none)."""
+    for term in ("\r\n", "\n", "\r"):
+        if line.endswith(term):
+            return term
+    return ""
+
+
+def set_weight(text: str, value: str) -> str:
+    """Return ``text`` with the day's weight set to ``weight :: <value> Kg``.
+
+    An existing ``weight ::`` line is updated in place; otherwise a new one is
+    appended at the end of the Notes body, one blank line below the preceding
+    content (matching the old ``daily --weight-entry`` placement).
+
+    The update scan spans the *whole* document, not just Notes, to agree with
+    ``model.parse_day`` - which reads the first ``weight ::`` occurrence
+    anywhere. Scanning only Notes could leave a stale weight line elsewhere
+    (e.g. under Macros) that the parser reads instead of the value just written.
+    """
+    lines = text.splitlines(keepends=True)
+    newline = _newline(lines)
+    weight_line = f"weight :: {value} Kg"
+    for i, line in enumerate(lines):
+        if _WEIGHT_LINE.match(line):
+            lines[i] = weight_line + _terminator(line)
+            return _join(lines)
+    _append_notes_block(lines, [weight_line + newline])
+    return _join(lines)

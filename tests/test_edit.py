@@ -148,6 +148,52 @@ def test_toggle_habit_preserves_crlf() -> None:
     assert "\n" not in out.replace("\r\n", "")  # no stray lone LFs
 
 
+def test_set_weight_appends_into_empty_notes() -> None:
+    text = "# D\n\n### 📝 Notes\n\n"
+    out = edit.set_weight(text, "75.0")
+    assert out == "# D\n\n### 📝 Notes\n\nweight :: 75.0 Kg\n"
+
+
+def test_set_weight_updates_existing_line_in_place() -> None:
+    text = "# D\n\n### 📝 Notes\n\nweight :: 70.0 Kg\n\nsome note\n"
+    out = edit.set_weight(text, "75.5")
+    # Only the value changes; the surrounding note survives byte-for-byte.
+    assert out == "# D\n\n### 📝 Notes\n\nweight :: 75.5 Kg\n\nsome note\n"
+
+
+def test_set_weight_appends_below_existing_notes_content() -> None:
+    text = "# D\n\n### 📝 Notes\n\nToday\n- [ ] a\n"
+    out = edit.set_weight(text, "80.0")
+    # Weight lands at the end of the Notes body, one blank line below the list.
+    assert out == "# D\n\n### 📝 Notes\n\nToday\n- [ ] a\n\nweight :: 80.0 Kg\n"
+
+
+def test_set_weight_updates_a_line_outside_notes_in_place() -> None:
+    """The parser reads the first `weight ::` anywhere; the writer must update
+    that same line rather than adding a second one in Notes (which the parser
+    would then ignore)."""
+    text = "# D\n\n### 🍽️ Macros\n\nweight :: 70.0 Kg\n\n### 📝 Notes\n\n"
+    out = edit.set_weight(text, "80.0")
+    # Exactly one weight line, updated where it already was.
+    assert out.count("weight ::") == 1
+    assert out == "# D\n\n### 🍽️ Macros\n\nweight :: 80.0 Kg\n\n### 📝 Notes\n\n"
+
+
+def test_set_weight_appends_with_no_trailing_newline() -> None:
+    """Appending weight to a file whose last line has no terminator must not
+    corrupt that line."""
+    text = "# D\n\n### 📝 Notes\n\nToday\n- [ ] a"  # no final newline
+    out = edit.set_weight(text, "75.0")
+    assert out == "# D\n\n### 📝 Notes\n\nToday\n- [ ] a\n\nweight :: 75.0 Kg\n"
+
+
+def test_set_weight_preserves_crlf_on_update() -> None:
+    text = "# D\r\n\r\n### 📝 Notes\r\n\r\nweight :: 70.0 Kg\r\n"
+    out = edit.set_weight(text, "71.0")
+    assert out == "# D\r\n\r\n### 📝 Notes\r\n\r\nweight :: 71.0 Kg\r\n"
+    assert "\n" not in out.replace("\r\n", "")  # no stray lone LFs
+
+
 def test_atomic_write_replaces_the_file(tmp_path: Path) -> None:
     path = tmp_path / "entry.md"
     path.write_text("old\n", encoding="utf-8")

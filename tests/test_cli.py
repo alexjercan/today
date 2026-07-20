@@ -72,9 +72,92 @@ def test_carry_forward_turns_tomorrow_into_today(tmp_path: Path) -> None:
 
 def test_mutation_subcommands_are_scaffolded(tmp_path: Path, capsys) -> None:
     den = _den(tmp_path)
-    rc = main(["--den", str(den), "weight"])
+    rc = main(["--den", str(den), "macros"])
     assert rc == 2  # planned, exits non-zero with a clear message
     assert "not implemented yet" in capsys.readouterr().err
+
+
+def test_weight_log_writes_the_line_and_json(tmp_path: Path, capsys) -> None:
+    from today.model import parse_day
+
+    den = _den(tmp_path)
+    rc = main(["--den", str(den), "weight", "75", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out == {"date": stem_for(0), "weight": 75.0}
+    text = entry_path(den, 0).read_text()
+    assert "weight :: 75.0 Kg" in text
+    # Round-trips through the parser.
+    assert parse_day(entry_path(den, 0)).weight == 75.0
+
+
+def test_weight_normalizes_unit_and_decimal(tmp_path: Path) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "weight", "80Kg"])
+    assert "weight :: 80.0 Kg" in entry_path(den, 0).read_text()
+
+
+def test_weight_updates_in_place(tmp_path: Path) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "weight", "75"])
+    main(["--den", str(den), "weight", "74.5"])
+    text = entry_path(den, 0).read_text()
+    assert text.count("weight ::") == 1  # updated, not duplicated
+    assert "weight :: 74.5 Kg" in text
+
+
+def test_weight_rejects_non_numeric(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    before = entry_path(den, 0).read_text()
+    capsys.readouterr()
+    rc = main(["--den", str(den), "weight", "heavy"])
+    assert rc == 1
+    assert "not a number" in capsys.readouterr().err
+    assert entry_path(den, 0).read_text() == before  # file untouched
+
+
+def test_weight_rejects_values_the_parser_cannot_read(tmp_path: Path, capsys) -> None:
+    """`float()` accepts these but the parser regex does not - logging any of
+    them would silently write a line that reads back as weight=None."""
+    from today.cli import _normalize_weight
+
+    for bad in ("-3", "1e3", "inf", "nan", ".5", "1.", "+5", "1_000", ""):
+        try:
+            _normalize_weight(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad!r} should be rejected")
+    # And the CLI surfaces it as an error, leaving the file untouched.
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    before = entry_path(den, 0).read_text()
+    capsys.readouterr()
+    rc = main(["--den", str(den), "weight", "1e3"])
+    assert rc == 1
+    assert entry_path(den, 0).read_text() == before
+
+
+def test_weight_show_reports_recent_trend(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    # Log weight on three consecutive days ending today.
+    for offset, value in ((-2, "70"), (-1, "71"), (0, "72")):
+        main(["--den", str(den), "-N", str(offset), "weight", value])
+    capsys.readouterr()
+    rc = main(["--den", str(den), "weight", "--days", "3", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["weight"] == 72.0
+    assert out["change"] == 2.0
+    assert [r["weight"] for r in out["recent"]] == [70.0, 71.0, 72.0]
+
+
+def test_weight_show_empty_when_none_logged(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    rc = main(["--den", str(den), "weight", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out == {"weight": None, "change": None, "recent": []}
 
 
 def test_habit_list_reports_habits_and_state(tmp_path: Path, capsys) -> None:

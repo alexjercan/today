@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import date, timedelta
@@ -198,6 +199,94 @@ def _cmd_habit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _normalize_weight(value: str) -> str:
+    """Normalize a user weight into the stored numeric string.
+
+    Accepts "75", "75Kg", "75 kg", "75.5"; strips the unit and ensures a decimal
+    point (so "75" -> "75.0"), mirroring the old ``daily --weight-entry``. The
+    result is validated against the *exact* grammar the parser reads back
+    (``model._WEIGHT``: non-negative integer or decimal), so we never write a
+    line ``parse_day`` cannot read - ``float()`` would wrongly accept ``inf``,
+    ``nan``, ``1e3``, ``-3`` and underscores. Raises ``ValueError`` otherwise.
+    """
+    cleaned = re.sub(r"(?i)\s*kg\s*$", "", value.strip()).strip()
+    normalized = cleaned if "." in cleaned else f"{cleaned}.0"
+    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", normalized):
+        raise ValueError(value)
+    return normalized
+
+
+def _collect_weights(den: Path, base_offset: int, days: int) -> list[tuple[str, float]]:
+    """Recorded (date-stem, weight) over the ``days`` ending at ``base_offset``.
+
+    Oldest first, skipping days with no entry file or no logged weight. Reads
+    existing files only - never creates one.
+    """
+    out: list[tuple[str, float]] = []
+    for delta in range(days - 1, -1, -1):
+        path = entry_path(den, base_offset - delta)
+        if not path.is_file():
+            continue
+        day = parse_day(path)
+        if day.weight is not None:
+            out.append((day.date, day.weight))
+    return out
+
+
+def _print_weight_trend(recent: list[tuple[str, float]], change: float | None) -> None:
+    """Human-readable weight history + net change over the window."""
+    if not recent:
+        print("(no weight logged)")
+        return
+    for stem, weight in recent:
+        print(f"{stem}: {weight} Kg")
+    if change is not None:
+        sign = "+" if change > 0 else ""
+        print(f"change: {sign}{round(change, 2)} Kg over {len(recent)} entries")
+
+
+def _cmd_weight(args: argparse.Namespace) -> int:
+    """Log the day's weight (``today weight <value>``) or show the recent trend
+    (bare ``today weight``)."""
+    den = resolve_den(args.den)
+
+    if args.value is not None:
+        try:
+            value = _normalize_weight(args.value)
+        except ValueError:
+            print(f"weight: not a number: {args.value!r}", file=sys.stderr)
+            return 1
+        path = ensure_entry(den, args.offset)
+        text = path.read_text(encoding="utf-8")
+        updated = edit.set_weight(text, value)
+        if updated != text:
+            edit.atomic_write(path, updated)
+        day = parse_day(path)
+        if args.json:
+            print(json.dumps({"date": day.date, "weight": day.weight}))
+        else:
+            print(f"logged weight: {day.weight} Kg")
+        return 0
+
+    # No value: show the recent trend over the last --days entries.
+    recent = _collect_weights(den, args.offset, args.days)
+    latest = recent[-1][1] if recent else None
+    change = recent[-1][1] - recent[0][1] if len(recent) >= 2 else None
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "weight": latest,
+                    "change": change,
+                    "recent": [{"date": d, "weight": w} for d, w in recent],
+                }
+            )
+        )
+    else:
+        _print_weight_trend(recent, change)
+    return 0
+
+
 def _cmd_planned(args: argparse.Namespace) -> int:
     print(f"`today {args._cmd}` {_PLANNED}", file=sys.stderr)
     return 2
@@ -255,6 +344,22 @@ def _add_habit_parser(sub: argparse._SubParsersAction) -> None:
     lst.set_defaults(func=_cmd_habit)
 
 
+def _add_weight_parser(sub: argparse._SubParsersAction) -> None:
+    """`today weight [<value>]` - log the day's weight, or show the trend."""
+    weight = sub.add_parser("weight", help="log or show weight")
+    weight.add_argument(
+        "value", nargs="?", help="weight to log (e.g. 75 or 75Kg); omit to show trend"
+    )
+    weight.add_argument(
+        "--days",
+        type=int,
+        default=7,
+        help="how many days back to include when showing the trend (default: 7)",
+    )
+    weight.add_argument("--json", action="store_true", help="machine-readable output")
+    weight.set_defaults(func=_cmd_weight)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="today",
@@ -284,10 +389,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_task_parser(sub)
     _add_habit_parser(sub)
+    _add_weight_parser(sub)
 
     # Mutation surface (scaffolded; the parity port is tracked in tasks/).
     for name, help_ in [
-        ("weight", "log or show weight"),
         ("macros", "add a macros entry (what,protein,carbs,fat)"),
         ("note", "add/list notes (with tags)"),
     ]:

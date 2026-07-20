@@ -1,8 +1,8 @@
 # today: weight (log + show/trend)
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 40
-- TAGS: feature,cli
+- TAGS: feature, cli
 
 ## Goal
 
