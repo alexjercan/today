@@ -1,8 +1,8 @@
 # today: habit mutations (habit toggle/list)
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 40
-- TAGS: feature,cli
+- TAGS: feature, cli
 
 ## Goal
 

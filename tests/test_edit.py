@@ -76,6 +76,78 @@ def test_fixture_prose_survives_a_toggle() -> None:
     assert out.count("\n") == original.count("\n")
 
 
+def test_toggle_habit_flips_only_the_matched_habit() -> None:
+    text = "# D\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n- [ ] 💪 Gym\n\n### 📝 Notes\n\n"
+    out = edit.toggle_habit(text, "gym")
+    assert out == (
+        "# D\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n- [x] 💪 Gym\n\n### 📝 Notes\n\n"
+    )
+    # Round-trips back off, and accepts the full emoji name too.
+    assert edit.toggle_habit(out, "💪 Gym") == text
+
+
+def test_toggle_habit_ignores_todo_checkboxes_outside_habits() -> None:
+    """A Today task named like a habit must not be flipped by a habit toggle."""
+    text = (
+        "# D\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n\n### 📝 Notes\n\nToday\n- [ ] Learn\n"
+    )
+    out = edit.toggle_habit(text, "Learn")
+    # The Habits 'Learn' flips; the identically named Today task does not.
+    assert out == (
+        "# D\n\n### 🌱 Habits\n\n- [x] 📕 Learn\n\n### 📝 Notes\n\nToday\n- [ ] Learn\n"
+    )
+
+
+def test_toggle_habit_unknown_raises() -> None:
+    text = "# D\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n"
+    for name in ("missing", "anything"):
+        try:
+            edit.toggle_habit(text, name)
+        except KeyError:
+            continue
+        raise AssertionError("expected KeyError")
+    # No Habits section at all also raises.
+    try:
+        edit.toggle_habit("# D\n\n### 📝 Notes\n\n", "Learn")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("expected KeyError when there is no Habits section")
+
+
+def test_toggle_habit_empty_name_never_matches() -> None:
+    """An empty or emoji-only query normalizes to "" and must not match a habit."""
+    text = "# D\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n"
+    for name in ("", "   ", "🔥"):
+        try:
+            edit.toggle_habit(text, name)
+        except KeyError:
+            continue
+        raise AssertionError(f"empty key from {name!r} should not match")
+
+
+def test_toggle_habit_first_of_duplicates_wins() -> None:
+    """When two habits share a normalized name, only the first flips."""
+    text = "# D\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n- [ ] 📗 Learn\n"
+    out = edit.toggle_habit(text, "learn")
+    assert out == "# D\n\n### 🌱 Habits\n\n- [x] 📕 Learn\n- [ ] 📗 Learn\n"
+
+
+def test_toggle_habit_no_trailing_newline_preserved() -> None:
+    """Toggling a habit on the last line of a file with no final newline keeps
+    the bytes intact (no newline is invented)."""
+    text = "# D\n\n### 🌱 Habits\n\n- [ ] 📕 Learn"  # no final newline
+    out = edit.toggle_habit(text, "Learn")
+    assert out == "# D\n\n### 🌱 Habits\n\n- [x] 📕 Learn"
+
+
+def test_toggle_habit_preserves_crlf() -> None:
+    text = "# D\r\n\r\n### 🌱 Habits\r\n\r\n- [ ] 📕 Learn\r\n- [ ] 💪 Gym\r\n"
+    out = edit.toggle_habit(text, "Learn")
+    assert out == "# D\r\n\r\n### 🌱 Habits\r\n\r\n- [x] 📕 Learn\r\n- [ ] 💪 Gym\r\n"
+    assert "\n" not in out.replace("\r\n", "")  # no stray lone LFs
+
+
 def test_atomic_write_replaces_the_file(tmp_path: Path) -> None:
     path = tmp_path / "entry.md"
     path.write_text("old\n", encoding="utf-8")

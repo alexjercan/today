@@ -143,6 +143,29 @@ def _target_line(lines: list[str], marker: str, index: int) -> int | None:
     return line_no
 
 
+def _section_region(lines: list[str], key: str) -> tuple[int, int] | None:
+    """The ``[start, end)`` body range of the ``### ... <key>`` section, or None.
+
+    ``key`` is a section key as ``model._section_of`` returns it ("habits",
+    "macros", "notes"). ``start`` is the line after the header; ``end`` is the
+    next ``### `` header (or EOF). Returns None when the section is absent.
+    """
+    header = None
+    for i, line in enumerate(lines):
+        h3 = _H3.match(line)
+        if h3 and _section_of(h3.group(1)) == key:
+            header = i
+            break
+    if header is None:
+        return None
+    end = len(lines)
+    for i in range(header + 1, len(lines)):
+        if _H3.match(lines[i]):
+            end = i
+            break
+    return header + 1, end
+
+
 def _notes_region(lines: list[str]) -> tuple[int, int]:
     """The ``[start, end)`` line range of the Notes section's body.
 
@@ -150,20 +173,8 @@ def _notes_region(lines: list[str]) -> tuple[int, int]:
     ``### `` header (or EOF). Falls back to ``(len, len)`` - append at EOF - when
     there is no Notes section at all.
     """
-    header = None
-    for i, line in enumerate(lines):
-        h3 = _H3.match(line)
-        if h3 and _section_of(h3.group(1)) == "notes":
-            header = i
-            break
-    if header is None:
-        return len(lines), len(lines)
-    end = len(lines)
-    for i in range(header + 1, len(lines)):
-        if _H3.match(lines[i]):
-            end = i
-            break
-    return header + 1, end
+    region = _section_region(lines, "notes")
+    return region if region is not None else (len(lines), len(lines))
 
 
 def _insert_section(lines: list[str], marker: str, bullet: str) -> None:
@@ -251,3 +262,36 @@ def _toggle_checkbox(line: str) -> str:
     if re.search(r"\[[xX]\]", line):
         return _CHECKBOX.sub("[ ]", line, count=1)
     return _CHECKBOX.sub("[x]", line, count=1)
+
+
+def _habit_key(name: str) -> str:
+    """Normalize a habit name for matching: strip a leading run of non-word
+    characters (emoji, symbols, punctuation, whitespace) and casefold. So
+    ``"📕 Learn"``, ``"Learn"`` and ``"learn"`` all normalize to ``"learn"``."""
+    return re.sub(r"^\W+", "", name.strip()).casefold()
+
+
+def toggle_habit(text: str, name: str) -> str:
+    """Return ``text`` with the matching habit's checkbox flipped.
+
+    Habits are the ``- [ ]``/``- [x]`` lines in the ``### ... Habits`` section.
+    ``name`` matches by habit name ignoring a leading emoji and case, so
+    ``toggle_habit(text, "gym")`` flips ``- [ ] 💪 Gym``. If several habits share
+    a normalized name, the first in document order is toggled. Raises
+    ``KeyError`` if no habit matches (or there is no Habits section); an empty or
+    emoji-only ``name`` normalizes to the empty key and never matches.
+    """
+    lines = text.splitlines(keepends=True)
+    region = _section_region(lines, "habits")
+    if region is None:
+        raise KeyError(name)
+    start, end = region
+    target = _habit_key(name)
+    if not target:
+        raise KeyError(name)
+    for i in range(start, end):
+        m = _CHECK.match(lines[i])
+        if m and _habit_key(m.group(2)) == target:
+            lines[i] = _toggle_checkbox(lines[i])
+            return _join(lines)
+    raise KeyError(name)

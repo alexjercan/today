@@ -72,9 +72,73 @@ def test_carry_forward_turns_tomorrow_into_today(tmp_path: Path) -> None:
 
 def test_mutation_subcommands_are_scaffolded(tmp_path: Path, capsys) -> None:
     den = _den(tmp_path)
-    rc = main(["--den", str(den), "habit"])
+    rc = main(["--den", str(den), "weight"])
     assert rc == 2  # planned, exits non-zero with a clear message
     assert "not implemented yet" in capsys.readouterr().err
+
+
+def test_habit_list_reports_habits_and_state(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    rc = main(["--den", str(den), "habit", "list", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out == [
+        {"name": "📕 Learn", "done": False},
+        {"name": "💪 Gym", "done": False},
+    ]
+
+
+def test_habit_toggle_matches_ignoring_emoji_and_case(tmp_path: Path, capsys) -> None:
+    from today.model import parse_day
+
+    den = _den(tmp_path)
+    # Match by the bare name, no emoji, any case.
+    rc = main(["--den", str(den), "habit", "toggle", "gym", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out == [
+        {"name": "📕 Learn", "done": False},
+        {"name": "💪 Gym", "done": True},
+    ]
+    # Persisted, and only the Gym checkbox changed.
+    day = parse_day(entry_path(den, 0))
+    assert [(h.name, h.done) for h in day.habits] == [
+        ("📕 Learn", False),
+        ("💪 Gym", True),
+    ]
+    # Toggling again flips it back off.
+    main(["--den", str(den), "habit", "toggle", "💪 Gym"])
+    day = parse_day(entry_path(den, 0))
+    assert day.habits[1].done is False
+
+
+def test_habit_toggle_unknown_is_an_error(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    before = entry_path(den, 0)
+    main(["--den", str(den), "create"])
+    original = before.read_text()
+    capsys.readouterr()
+    rc = main(["--den", str(den), "habit", "toggle", "nope"])
+    assert rc == 1
+    assert "no habit matching" in capsys.readouterr().err
+    # A rejected toggle leaves the file untouched.
+    assert before.read_text() == original
+
+
+def test_habit_toggle_preserves_the_rest_of_the_file(tmp_path: Path) -> None:
+    den = _den(tmp_path)
+    path = entry_path(den, 0)
+    original = (
+        "# Monday\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n- [ ] 💪 Gym\n\n"
+        "### 🍽️ Macros\n\nwhat,protein,carbs,fat\n\n### 📝 Notes\n\n"
+        "Today\n- [ ] a task with [ ] brackets in it\n"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(original, encoding="utf-8")
+    main(["--den", str(den), "habit", "toggle", "Learn"])
+    # Only the Learn habit checkbox flips; the Today task (also a checkbox) and
+    # its literal brackets are untouched.
+    assert path.read_text() == original.replace("- [ ] 📕 Learn", "- [x] 📕 Learn", 1)
 
 
 def test_task_add_appends_a_today_checkbox(tmp_path: Path, capsys) -> None:

@@ -16,7 +16,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from today import edit
-from today.model import Task, TomorrowTask, parse_day
+from today.model import Habit, Task, TomorrowTask, parse_day
 
 DEFAULT_DEN = Path.home() / "personal" / "the-den"
 DEFAULT_EDITOR = "nvim"
@@ -165,6 +165,39 @@ def _cmd_task(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_habits(habits: list[Habit]) -> None:
+    """Human-readable listing of habits and their done state."""
+    if not habits:
+        print("(no habits)")
+        return
+    for h in habits:
+        box = "[x]" if h.done else "[ ]"
+        print(f"{box} {h.name}")
+
+
+def _cmd_habit(args: argparse.Namespace) -> int:
+    """toggle a habit's checkbox (by name) or list habits, then report them."""
+    den = resolve_den(args.den)
+    path = ensure_entry(den, args.offset)
+
+    if args.haction == "toggle":
+        text = path.read_text(encoding="utf-8")
+        try:
+            updated = edit.toggle_habit(text, args.name)
+        except KeyError:
+            print(f"habit: no habit matching {args.name!r}", file=sys.stderr)
+            return 1
+        if updated != text:
+            edit.atomic_write(path, updated)
+
+    day = parse_day(path)
+    if args.json:
+        print(json.dumps([h.to_dict() for h in day.habits], ensure_ascii=False))
+    else:
+        _print_habits(day.habits)
+    return 0
+
+
 def _cmd_planned(args: argparse.Namespace) -> int:
     print(f"`today {args._cmd}` {_PLANNED}", file=sys.stderr)
     return 2
@@ -205,6 +238,23 @@ def _add_task_parser(sub: argparse._SubParsersAction) -> None:
     rm.set_defaults(func=_cmd_task)
 
 
+def _add_habit_parser(sub: argparse._SubParsersAction) -> None:
+    """`today habit {toggle,list}` - flip a habit's checkbox or list habits."""
+    habit = sub.add_parser("habit", help="toggle/list habits")
+    actions = habit.add_subparsers(dest="haction", required=True)
+
+    toggle = actions.add_parser("toggle", help="check/uncheck a habit by name")
+    toggle.add_argument("name", help="habit name (a leading emoji is optional)")
+    toggle.add_argument(
+        "--json", action="store_true", help="print the updated habits as JSON"
+    )
+    toggle.set_defaults(func=_cmd_habit)
+
+    lst = actions.add_parser("list", help="list habits and their done state")
+    lst.add_argument("--json", action="store_true", help="print habits as JSON")
+    lst.set_defaults(func=_cmd_habit)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="today",
@@ -233,10 +283,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_show)
 
     _add_task_parser(sub)
+    _add_habit_parser(sub)
 
     # Mutation surface (scaffolded; the parity port is tracked in tasks/).
     for name, help_ in [
-        ("habit", "toggle/list habits"),
         ("weight", "log or show weight"),
         ("macros", "add a macros entry (what,protein,carbs,fat)"),
         ("note", "add/list notes (with tags)"),
