@@ -37,6 +37,26 @@ def test_parse_day_reads_the_filename_stem_as_date() -> None:
     assert day.file.endswith(f"{stem}.md")
 
 
+def test_only_standard_checkboxes_are_tasks(tmp_path: Path) -> None:
+    """Only `- [ ]` and `- [x]` are tasks. A non-standard marker like `- [~]`
+    (the retired "won't do") is skipped, not counted as a task. This is a
+    deliberate divergence from the old daily, whose today_tasks() awk stops the
+    whole list at the first non-`[ ]`/`[x]` line (dropping every task after it);
+    the new parser surfaces the real `[x]`/`[ ]` tasks instead of losing them."""
+    path = tmp_path / "2026-07-20-Monday.md"
+    path.write_text(
+        "# D\n\n### 📝 Notes\n\n"
+        "Today\n- [~] wont do this\n- [x] did this\n- [ ] still todo\n",
+        encoding="utf-8",
+    )
+    tasks = parse_day(path).tasks
+    # The [~] line is not a task; the [x] and [ ] lines are.
+    assert [(t.text, t.done) for t in tasks] == [
+        ("did this", True),
+        ("still todo", False),
+    ]
+
+
 def test_parse_macros_survives_non_finite_row(tmp_path: Path) -> None:
     """A hand-edited file with an inf/nan macro must not crash the reader (the
     calorie round() would otherwise throw); the bad row is skipped."""

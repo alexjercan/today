@@ -42,8 +42,9 @@ def stem_for(offset: int) -> str:
 
 def title_for(offset: int) -> str:
     d = day_for(offset)
-    # "%-d" is a non-zero-padded day of month (GNU/BSD); matches the-den's titles.
-    return d.strftime("%A, %B %-d, %Y")
+    # Zero-padded day of month ("%d") - the-den's real titles are padded
+    # ("Friday, January 02, 2026"), matching the old today's `date +%d`.
+    return d.strftime("%A, %B %d, %Y")
 
 
 def entry_path(den: Path, offset: int) -> Path:

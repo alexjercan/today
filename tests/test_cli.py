@@ -5,7 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from today.cli import build_parser, entry_path, main, resolve_den, stem_for
+from today.cli import (
+    build_parser,
+    day_for,
+    entry_path,
+    main,
+    resolve_den,
+    stem_for,
+    title_for,
+)
 
 
 def _den(tmp_path: Path) -> Path:
@@ -55,6 +63,16 @@ def test_path_does_not_create_the_entry(tmp_path: Path, capsys) -> None:
     assert not entry_path(den, 0).exists()  # path is read-only
 
 
+def test_title_pads_day_of_month_to_two_digits() -> None:
+    """the-den titles are zero-padded ("Friday, January 02, 2026"), matching the
+    old today's `date +%d`. Scan a month of offsets so a single-digit day is hit
+    regardless of the run date."""
+    for off in range(0, 40):
+        d = day_for(off)
+        expected = f"{d.strftime('%A, %B')} {d.day:02d}, {d.year}"
+        assert title_for(off) == expected
+
+
 def test_carry_forward_turns_tomorrow_into_today(tmp_path: Path) -> None:
     den = _den(tmp_path)
     # Yesterday has a Tomorrow list; creating today should carry it into Today.
@@ -68,6 +86,50 @@ def test_carry_forward_turns_tomorrow_into_today(tmp_path: Path) -> None:
 
     day = parse_day(entry_path(den, 0))
     assert [t.text for t in day.tasks] == ["ship the thing"]
+
+
+def test_carry_forward_no_previous_entry_is_clean(tmp_path: Path) -> None:
+    """No yesterday file: create still succeeds with an empty Today (old today
+    warns and skips the carry-over)."""
+    from today.model import parse_day
+
+    den = _den(tmp_path)
+    assert not entry_path(den, -1).exists()
+    rc = main(["--den", str(den), "create"])
+    assert rc == 0
+    day = parse_day(entry_path(den, 0))
+    assert day.tasks == []
+    assert "Today" not in entry_path(den, 0).read_text()  # no empty Today marker
+
+
+def test_carry_forward_empty_tomorrow_carries_nothing(tmp_path: Path) -> None:
+    """Yesterday has a Tomorrow header but no bullets: nothing is carried."""
+    from today.model import parse_day
+
+    den = _den(tmp_path)
+    entry_path(den, -1).write_text(
+        "# yesterday\n\n### 📝 Notes\n\nTomorrow\n\nsome prose\n", encoding="utf-8"
+    )
+    main(["--den", str(den), "create"])
+    day = parse_day(entry_path(den, 0))
+    assert day.tasks == []
+
+
+def test_carry_forward_multiple_tomorrow_items(tmp_path: Path) -> None:
+    from today.model import parse_day
+
+    den = _den(tmp_path)
+    entry_path(den, -1).write_text(
+        "# yesterday\n\n### 📝 Notes\n\nTomorrow\n- one\n- two\n- three\n",
+        encoding="utf-8",
+    )
+    main(["--den", str(den), "create"])
+    day = parse_day(entry_path(den, 0))
+    assert [(t.index, t.text, t.done) for t in day.tasks] == [
+        (1, "one", False),
+        (2, "two", False),
+        (3, "three", False),
+    ]
 
 
 def test_note_add_then_list_roundtrips(tmp_path: Path, capsys) -> None:

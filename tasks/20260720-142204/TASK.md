@@ -1,8 +1,8 @@
 # today: parity + templating hardening (more golden fixtures, carry-forward)
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 30
-- TAGS: feature,cli
+- TAGS: feature, cli
 
 ## Goal
 
