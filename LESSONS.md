@@ -18,11 +18,12 @@ One line per recurring lesson; /compound appends or bumps counts.
 - `normalizer-empty-result-edge` (x1): when a matcher normalizes input
   (strip/casefold/regex), test the degenerate empty/all-stripped result as a
   first-class case - it can silently match the wrong item. 20260720-142200
-- `writer-must-honor-reader-grammar` (x1): a writer must validate input against
-  the reader's exact grammar (not a looser stdlib parse like `float()`) and scan
-  the same span the reader scans, or it silently writes lines the parser reads
-  back as empty/stale; pin it with a write->parse round-trip test over
-  adversarial inputs. 20260720-142201
+- `writer-must-honor-reader-grammar` (x2): a writer must honor the reader's
+  WHOLE pipeline (parse AND every downstream op that can throw - round/int/div),
+  not just its surface parse, and scan the same span; where the writer can't know
+  a downstream aggregate, make the reader total so file contents never crash it.
+  Pin with a write->parse round-trip over adversarial inputs. 20260720-142201,
+  20260720-142202
 
 ## Pending promotions (3+ occurrences, user decides)
 
