@@ -82,6 +82,10 @@
             cd work
             export HOME=$TMPDIR
             export PYTHONPATH=
+            # The dev venv is an editable install whose .pth resolves the
+            # `today` package via $REPO_ROOT (set only in the devShell). Point
+            # it at the copied source so `import today` works in the sandbox.
+            export REPO_ROOT=$PWD
             ${command}
             touch $out
           '';
