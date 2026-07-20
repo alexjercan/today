@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -287,6 +288,66 @@ def _cmd_weight(args: argparse.Namespace) -> int:
     return 0
 
 
+def _normalize_macros_row(row: str) -> str:
+    """Validate and normalize a ``what,protein,carbs,fat`` macros row.
+
+    The protein/carbs/fat cells must be *finite* numbers - the reader's grammar
+    is ``float()`` composed with ``round()`` (``model._parse_macros`` sums the
+    cells then rounds for calories), and ``round()`` throws on ``inf``/``nan``
+    even though ``float()`` accepts them. Rejecting non-finite values here means
+    we never write a row that later crashes ``parse_day``. The food name must not
+    be ``what`` (the parser treats a leading ``what,`` as the table header and
+    skips it). Returns the cleaned ``what,protein,carbs,fat`` line; raises
+    ``ValueError`` on a bad row.
+    """
+    cells = [c.strip() for c in row.split(",")]
+    if len(cells) < 4:
+        raise ValueError("expected what,protein,carbs,fat")
+    for label, cell in zip(("protein", "carbs", "fat"), cells[1:4], strict=True):
+        try:
+            value = float(cell)
+        except ValueError:
+            raise ValueError(f"{label} is not a number: {cell!r}") from None
+        if not math.isfinite(value):
+            raise ValueError(f"{label} is not a finite number: {cell!r}")
+    if cells[0] == "what":
+        raise ValueError("food name 'what' collides with the table header")
+    return ",".join(cells[:4])
+
+
+def _cmd_macros(args: argparse.Namespace) -> int:
+    """Append a macros row (``today macros add <row>``) or report the aggregate
+    (bare ``today macros``)."""
+    den = resolve_den(args.den)
+    path = ensure_entry(den, args.offset)
+
+    if getattr(args, "maction", None) == "add":
+        try:
+            row = _normalize_macros_row(args.row)
+        except ValueError as exc:
+            print(f"macros: {exc}", file=sys.stderr)
+            return 1
+        text = path.read_text(encoding="utf-8")
+        try:
+            updated = edit.add_macros_row(text, row)
+        except LookupError as exc:
+            print(f"macros: {exc}", file=sys.stderr)
+            return 1
+        if updated != text:
+            edit.atomic_write(path, updated)
+
+    day = parse_day(path)
+    if getattr(args, "json", False):
+        print(json.dumps(day.macros.to_dict()))
+    else:
+        m = day.macros
+        print(
+            f"protein: {m.protein}  carbs: {m.carbs}  fat: {m.fat}  "
+            f"calories: {m.calories}"
+        )
+    return 0
+
+
 def _cmd_planned(args: argparse.Namespace) -> int:
     print(f"`today {args._cmd}` {_PLANNED}", file=sys.stderr)
     return 2
@@ -360,6 +421,34 @@ def _add_weight_parser(sub: argparse._SubParsersAction) -> None:
     weight.set_defaults(func=_cmd_weight)
 
 
+def _add_macros_parser(sub: argparse._SubParsersAction) -> None:
+    """`today macros [add <row>]` - append a macros row, or show the aggregate.
+
+    ``--json`` uses ``SUPPRESS`` defaults on both the parent and the ``add``
+    subparser so the subparser's default never clobbers a ``--json`` given
+    before the subcommand (and vice versa); the handler reads it via getattr.
+    """
+    macros = sub.add_parser("macros", help="add a macros row or show the aggregate")
+    macros.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="machine-readable output",
+    )
+    macros.set_defaults(func=_cmd_macros)
+
+    actions = macros.add_subparsers(dest="maction")
+    add = actions.add_parser("add", help="append a what,protein,carbs,fat row")
+    add.add_argument("row", help="CSV row: what,protein,carbs,fat")
+    add.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="machine-readable output",
+    )
+    add.set_defaults(func=_cmd_macros)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="today",
@@ -390,10 +479,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_task_parser(sub)
     _add_habit_parser(sub)
     _add_weight_parser(sub)
+    _add_macros_parser(sub)
 
     # Mutation surface (scaffolded; the parity port is tracked in tasks/).
     for name, help_ in [
-        ("macros", "add a macros entry (what,protein,carbs,fat)"),
         ("note", "add/list notes (with tags)"),
     ]:
         p = sub.add_parser(name, help=help_)

@@ -72,9 +72,110 @@ def test_carry_forward_turns_tomorrow_into_today(tmp_path: Path) -> None:
 
 def test_mutation_subcommands_are_scaffolded(tmp_path: Path, capsys) -> None:
     den = _den(tmp_path)
-    rc = main(["--den", str(den), "macros"])
+    rc = main(["--den", str(den), "note"])
     assert rc == 2  # planned, exits non-zero with a clear message
     assert "not implemented yet" in capsys.readouterr().err
+
+
+def test_macros_add_appends_and_aggregates(tmp_path: Path, capsys) -> None:
+    from today.model import parse_day
+
+    den = _den(tmp_path)
+    rc = main(["--den", str(den), "macros", "add", "eggs,12,1,10", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    # 12*4 + 1*4 + 10*9 = 142 kcal (Atwater).
+    assert out == {"protein": 12.0, "carbs": 1.0, "fat": 10.0, "calories": 142}
+    # The row lands under the CSV header, and parse_day aggregates it.
+    text = entry_path(den, 0).read_text()
+    assert "what,protein,carbs,fat\neggs,12,1,10\n" in text
+    assert parse_day(entry_path(den, 0)).macros.protein == 12.0
+
+
+def test_macros_add_accumulates_multiple_rows(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "macros", "add", "eggs,12,1,10"])
+    capsys.readouterr()
+    rc = main(["--den", str(den), "macros", "add", "rice,3,40,1", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["protein"] == 15.0
+    assert out["carbs"] == 41.0
+    assert out["fat"] == 11.0
+
+
+def test_macros_bare_reports_aggregate(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "macros", "add", "eggs,12,1,10"])
+    capsys.readouterr()
+    rc = main(["--den", str(den), "macros", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["protein"] == 12.0
+
+
+def test_macros_rejects_non_numeric_row(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    before = entry_path(den, 0).read_text()
+    capsys.readouterr()
+    rc = main(["--den", str(den), "macros", "add", "eggs,lots,1,10"])
+    assert rc == 1
+    assert "macros:" in capsys.readouterr().err
+    assert entry_path(den, 0).read_text() == before  # file untouched
+
+
+def test_macros_rejects_too_few_columns(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    capsys.readouterr()
+    rc = main(["--den", str(den), "macros", "add", "eggs,12,1"])
+    assert rc == 1
+
+
+def test_macros_rejects_non_finite_cells(tmp_path: Path, capsys) -> None:
+    """inf/nan/1e400 pass float() but make the parser's calorie round() throw -
+    logging one would poison the file, so the writer must reject them."""
+    from today.cli import _normalize_macros_row
+    from today.model import parse_day
+
+    for bad in ("x,inf,1,1", "x,1,nan,1", "x,1,1,-inf", "x,1e400,1,1"):
+        try:
+            _normalize_macros_row(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad!r} should be rejected")
+    # End to end: rejected, file untouched, and the day still parses.
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    before = entry_path(den, 0).read_text()
+    capsys.readouterr()
+    rc = main(["--den", str(den), "macros", "add", "x,inf,1,1"])
+    assert rc == 1
+    assert entry_path(den, 0).read_text() == before
+    parse_day(entry_path(den, 0))  # does not raise
+
+
+def test_macros_capital_what_is_data_not_header(tmp_path: Path, capsys) -> None:
+    """The parser skips only lowercase `what,`; `What,...` is data, and the
+    writer accepts it - so the two agree it is aggregated."""
+    den = _den(tmp_path)
+    main(["--den", str(den), "macros", "add", "What,5,0,0", "--json"])
+    out = json.loads(capsys.readouterr().out)
+    assert out["protein"] == 5.0
+
+
+def test_macros_rejects_row_that_parser_would_drop_as_header(
+    tmp_path: Path, capsys
+) -> None:
+    """A food literally named 'what' produces a 'what,...' line the parser skips
+    as the table header, so it must be rejected rather than silently dropped."""
+    den = _den(tmp_path)
+    main(["--den", str(den), "create"])
+    capsys.readouterr()
+    rc = main(["--den", str(den), "macros", "add", "what,1,2,3"])
+    assert rc == 1
+    assert "header" in capsys.readouterr().err
 
 
 def test_weight_log_writes_the_line_and_json(tmp_path: Path, capsys) -> None:

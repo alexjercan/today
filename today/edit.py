@@ -334,3 +334,28 @@ def set_weight(text: str, value: str) -> str:
             return _join(lines)
     _append_notes_block(lines, [weight_line + newline])
     return _join(lines)
+
+
+def add_macros_row(text: str, row: str) -> str:
+    """Return ``text`` with ``row`` appended as the last row of the Macros table.
+
+    ``row`` is a ``what,protein,carbs,fat`` CSV line. It is inserted directly
+    after the last non-blank line of the ``### ... Macros`` section (contiguous
+    with the existing rows, matching the old ``daily --macros-entry``), so
+    ``model._parse_macros`` aggregates it. Raises ``LookupError`` if there is no
+    Macros section.
+    """
+    lines = text.splitlines(keepends=True)
+    newline = _newline(lines)
+    region = _section_region(lines, "macros")
+    if region is None:
+        raise LookupError("no Macros section")
+    start, end = region
+    content_end = start
+    for i in range(start, end):
+        if lines[i].strip() != "":
+            content_end = i + 1
+    if content_end > 0 and not lines[content_end - 1].endswith(("\n", "\r")):
+        lines[content_end - 1] += newline
+    lines.insert(content_end, row + newline)
+    return _join(lines)

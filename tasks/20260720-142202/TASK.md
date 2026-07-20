@@ -1,8 +1,8 @@
 # today: macros (add row + aggregate)
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 40
-- TAGS: feature,cli
+- TAGS: feature, cli
 
 ## Goal
 

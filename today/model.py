@@ -12,6 +12,7 @@ the only writer (so nothing else has to parse the markdown).
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -126,13 +127,23 @@ def _parse_macros(lines: list[str]) -> Macros:
         if len(cells) < 4:
             continue
         try:
-            protein += float(cells[1])
-            carbs += float(cells[2])
-            fat += float(cells[3])
+            values = [float(cells[1]), float(cells[2]), float(cells[3])]
         except ValueError:
             continue
-    # Atwater factors: protein/carbs 4 kcal/g, fat 9 kcal/g.
-    calories = round(protein * 4 + carbs * 4 + fat * 9)
+        # Skip non-finite cells too: inf/nan would make the calorie round()
+        # below throw, so the reader must never let them into the sums (a
+        # hand-edited file could carry them). The writer rejects them upstream.
+        if not all(math.isfinite(v) for v in values):
+            continue
+        protein += values[0]
+        carbs += values[1]
+        fat += values[2]
+    # Atwater factors: protein/carbs 4 kcal/g, fat 9 kcal/g. Guard the total
+    # against a non-finite result: finite cells can still sum past DBL_MAX to
+    # inf (absurd hand-edited values), and round(inf) throws - the reader must
+    # never crash on file contents.
+    total = protein * 4 + carbs * 4 + fat * 9
+    calories = round(total) if math.isfinite(total) else 0
     return Macros(protein=protein, carbs=carbs, fat=fat, calories=calories)
 
 

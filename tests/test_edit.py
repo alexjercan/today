@@ -194,6 +194,42 @@ def test_set_weight_preserves_crlf_on_update() -> None:
     assert "\n" not in out.replace("\r\n", "")  # no stray lone LFs
 
 
+def test_add_macros_row_appends_under_the_header() -> None:
+    text = "# D\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\n\n### 📝 Notes\n\n"
+    out = edit.add_macros_row(text, "eggs,12,1,10")
+    # Row lands contiguous with the table (after the header row), Notes intact.
+    assert out == (
+        "# D\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\neggs,12,1,10\n\n"
+        "### 📝 Notes\n\n"
+    )
+
+
+def test_add_macros_row_appends_after_existing_rows() -> None:
+    text = (
+        "# D\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\neggs,12,1,10\n\n"
+        "### 📝 Notes\n\n"
+    )
+    out = edit.add_macros_row(text, "rice,3,40,1")
+    assert "eggs,12,1,10\nrice,3,40,1\n" in out
+
+
+def test_add_macros_row_preserves_crlf() -> None:
+    text = (
+        "# D\r\n\r\n### 🍽️ Macros\r\n\r\nwhat,protein,carbs,fat\r\n\r\n### 📝 Notes\r\n"
+    )
+    out = edit.add_macros_row(text, "eggs,12,1,10")
+    assert "what,protein,carbs,fat\r\neggs,12,1,10\r\n" in out
+    assert "\n" not in out.replace("\r\n", "")  # no stray lone LFs
+
+
+def test_add_macros_row_no_macros_section_raises() -> None:
+    try:
+        edit.add_macros_row("# D\n\n### 📝 Notes\n\n", "eggs,12,1,10")
+    except LookupError:
+        return
+    raise AssertionError("expected LookupError when there is no Macros section")
+
+
 def test_atomic_write_replaces_the_file(tmp_path: Path) -> None:
     path = tmp_path / "entry.md"
     path.write_text("old\n", encoding="utf-8")

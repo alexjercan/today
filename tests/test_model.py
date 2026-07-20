@@ -35,3 +35,30 @@ def test_parse_day_reads_the_filename_stem_as_date() -> None:
     day = parse_day(FIXTURES / f"{stem}.md")
     assert day.date == stem
     assert day.file.endswith(f"{stem}.md")
+
+
+def test_parse_macros_survives_non_finite_row(tmp_path: Path) -> None:
+    """A hand-edited file with an inf/nan macro must not crash the reader (the
+    calorie round() would otherwise throw); the bad row is skipped."""
+    path = tmp_path / "2026-07-20-Monday.md"
+    path.write_text(
+        "# D\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\n"
+        "eggs,10,0,0\nbad,inf,1,1\n\n### 📝 Notes\n\n",
+        encoding="utf-8",
+    )
+    macros = parse_day(path).macros  # must not raise
+    assert macros.protein == 10.0  # the inf row is skipped, eggs still counted
+    assert macros.calories == 40
+
+
+def test_parse_macros_survives_finite_sum_overflow(tmp_path: Path) -> None:
+    """Finite cells can still sum past DBL_MAX to inf; round() would throw, so
+    the calorie total is guarded and the reader degrades to 0 calories."""
+    path = tmp_path / "2026-07-20-Monday.md"
+    path.write_text(
+        "# D\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\n"
+        "a,1e308,0,0\nb,1e308,0,0\n\n### 📝 Notes\n\n",
+        encoding="utf-8",
+    )
+    macros = parse_day(path).macros  # must not raise despite an inf sum
+    assert macros.calories == 0
