@@ -15,6 +15,9 @@ One line per recurring lesson; /compound appends or bumps counts.
 - `devshell-env-not-in-checks` (x1): env a tool needs that is set only in the
   devShell shellHook (e.g. `REPO_ROOT` for the editable `.pth`) is absent in
   check/CI/`nix build` sandboxes; replicate it in `mkCheck`. 20260720-172833
+- `normalizer-empty-result-edge` (x1): when a matcher normalizes input
+  (strip/casefold/regex), test the degenerate empty/all-stripped result as a
+  first-class case - it can silently match the wrong item. 20260720-142200
 
 ## Pending promotions (3+ occurrences, user decides)
 
