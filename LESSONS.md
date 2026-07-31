@@ -32,6 +32,14 @@ One line per recurring lesson; /compound appends or bumps counts.
   signal (build/test/lint/`uv lock --check`), run it bare or `set -o pipefail`
   before reading a piped tail - `cmd | tail` reports tail's rc 0 and hid a stale
   lock. 20260720-142205
+- `extraction-assert-on-content` (x1): when a script slices a file (awk range,
+  section extract), assert on the slice's first and last line, not just that it
+  is non-empty - a "stop at the next heading" range ran to EOF for the oldest
+  section and swept the link block into the release notes. 20260731-152711
+- `status-doc-backfill-sweeps-status-prose` (x1): backfilling a status document
+  (changelog, release notes) is a claim about the whole repo, so sweep for
+  contradicting status prose ("planned", "TODO", "not yet"), not only for
+  renamed symbols. 20260731-152711
 
 ## Pending promotions (3+ occurrences, user decides)
 

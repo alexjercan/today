@@ -1,0 +1,26 @@
+name: check
+
+on:
+  # Branch-filtered so a release tag does not run this suite twice: once here
+  # and once through release.yml's check job.
+  push:
+    branches:
+      - master
+  pull_request:
+  # Called by release.yml so a tag cannot publish without the checks.
+  workflow_call:
+
+jobs:
+  check:
+    name: nix flake check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # ruff, mypy and pytest, each as its own check derivation.
+      - run: nix flake check -L

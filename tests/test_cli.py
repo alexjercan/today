@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
+import pytest
+
+import today
 from today.cli import (
     build_parser,
     day_for,
@@ -578,3 +582,19 @@ def test_parser_exposes_the_full_command_surface() -> None:
         "macros",
         "note",
     } <= set(sub.choices or ())
+
+
+def test_version_flag_prints_the_package_version(capsys) -> None:
+    # argparse's `version` action prints and exits, so it never returns a code.
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"today {today.__version__}"
+
+
+def test_version_matches_pyproject() -> None:
+    # The version is declared twice (packaging metadata and the CLI's
+    # --version); the release guard in CI greps both, so keep them equal.
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    declared = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    assert today.__version__ == declared["project"]["version"]

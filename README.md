@@ -16,8 +16,8 @@ today path                  # print today's entry path (no create)
 today create                # create from the template, print the path
 today show [--json]         # read the day: habits/tasks/tomorrow/macros/weight
 today -N -1 show            # operate on another day (offset in days)
+today --version             # print the declared version
 
-# (planned - parity port, see tasks/)
 today task add "go to gym"  # add a task; task done/rm; --tomorrow variant
 today habit toggle Gym
 today weight 80
@@ -40,10 +40,15 @@ nix flake check    # runs ruff + mypy + pytest
 nix run .          # run the CLI
 ```
 
+CI runs the same `nix flake check` on `master` and every PR. Releases are
+tag-driven: pushing a `vX.Y.Z` tag re-runs the checks, verifies the tag against
+the declared version, and publishes a GitHub Release from that version's
+`CHANGELOG.md` section - see `AGENTS.md` for the procedure.
+
 ## Status
 
-Bootstrapped: the day model + markdown parser (golden parity with the old
-`daily --json`), and the read/create/editor commands. The mutation subcommands
-(task/habit/weight/macros/note) and a few improvements are the parity-port work
-tracked in `tasks/`. Then nix.dotfiles swaps `today.nix`/`daily.nix` for this
-package, and scufris wraps the subcommands as MCP tools.
+The parity port is complete as of v0.1.0: the day model + markdown parser
+(golden parity with the old `daily --json`), the read/create/editor commands
+and every mutation subcommand (task/habit/weight/macros/note) ship. Next:
+nix.dotfiles swaps `today.nix`/`daily.nix` for this package, and scufris wraps
+the subcommands as MCP tools. Ongoing work is tracked in `tasks/`.

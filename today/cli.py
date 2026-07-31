@@ -17,7 +17,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from today import edit
+from today import __version__, edit
 from today.model import Habit, Task, TomorrowTask, parse_day
 
 DEFAULT_DEN = Path.home() / "personal" / "the-den"
@@ -517,6 +517,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Open and update the-den journal. Bare `today` opens today's "
         "entry in $EDITOR; subcommands are non-interactive.",
     )
+    # The release workflow greps this same version out of pyproject.toml and
+    # today/__init__.py before it publishes a tag.
+    parser.add_argument("--version", action="version", version=f"today {__version__}")
     parser.add_argument(
         "--den", help="den directory (default: $DEN_PATH or ~/personal/the-den)"
     )
