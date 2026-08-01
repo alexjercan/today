@@ -9,7 +9,8 @@ only; this CLI is the sole reader/writer of its markdown.
 - Examples/retention: runnable examples live in the owning task folder (`tasks/<id>/`) and are retained with that record; no top-level `examples/` or `scripts/`.
 - Domain docs: `README.md` for CLI surface; the-den markdown format is defined by `today/model.py` + the golden fixtures in `tests/fixtures/`.
 - Research/network: offline only - stdlib at runtime, no runtime deps, no network in code or checks; new deps need explicit user approval.
-- Checks/records: `nix flake check` (ruff + mypy + pytest) plus `tatr check --ledger LESSONS.md`; read `LESSONS.md` before starting and write a retro into the task folder after. CI (`.github/workflows/check.yml`) runs the same `nix flake check` on master and every PR.
+- Checks/records: `nix flake check` (ruff + mypy + pytest) plus `tatr check`; write a retro into the task folder after. CI (`.github/workflows/check.yml`) runs the same `nix flake check` on master and every PR.
+- Knowledge: central repo `/home/alex/personal/agent-knowledge`; project=today; tags=python,journal,cli,markdown. Advisory only; failed writes stay in RETRO.
 
 ## Changelog
 - Every user-visible change adds one short line under `## [Unreleased]` in `CHANGELOG.md`, in `Added` / `Changed` / `Fixed`.
