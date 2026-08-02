@@ -1,11 +1,11 @@
 # Release mechanism for v0.1.0: CHANGELOG, CI, tag-triggered GitHub release
 
-- STATUS: CLOSED
 - PRIORITY: 1
 - TAGS: release, ci
 - KIND: TASK
-- FLOW STEP: DONE
-- PLAN STATUS: APPROVED
+- ACTIVITY: COMPOUNDING
+- GATES: PLAN REVIEW RETRO
+- RESOLUTION: DONE
 
 Give `today` the release mechanism macros.nvim and tatr already have: a
 changelog contract, CI that runs the flake checks, and a `vX.Y.Z` tag that

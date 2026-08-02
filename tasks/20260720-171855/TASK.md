@@ -1,11 +1,11 @@
 # Adopt flow v2: root LESSONS.md, clean tatr check, AGENTS.md flow section
 
-- STATUS: CLOSED
 - PRIORITY: 90
 - TAGS: chore, process
 - KIND: TASK
-- FLOW STEP: DONE
-- PLAN STATUS: NOT_REQUIRED
+- ACTIVITY: COMPOUNDING
+- GATES: REVIEW RETRO
+- RESOLUTION: DONE
 
 ## Story
 

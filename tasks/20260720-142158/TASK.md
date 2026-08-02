@@ -1,11 +1,11 @@
 # Bootstrap the today project (repo, model+parser, read/create/editor CLI)
 
-- STATUS: CLOSED
 - PRIORITY: 50
 - TAGS: setup
 - KIND: TASK
-- FLOW STEP: DONE
-- PLAN STATUS: NOT_REQUIRED
+- ACTIVITY: COMPOUNDING
+- GATES: REVIEW RETRO
+- RESOLUTION: DONE
 
 ## Goal
 

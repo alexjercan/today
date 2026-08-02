@@ -1,11 +1,11 @@
 # today: task mutations + safe write-back foundation (task add/done/rm, --tomorrow)
 
-- STATUS: CLOSED
 - PRIORITY: 50
-- TAGS: feature,cli
+- TAGS: feature, cli
 - KIND: TASK
-- FLOW STEP: DONE
-- PLAN STATUS: NOT_REQUIRED
+- ACTIVITY: COMPOUNDING
+- GATES: REVIEW RETRO
+- RESOLUTION: DONE
 
 ## Goal
 
