@@ -9,6 +9,10 @@ one line each. Breaking changes are tagged **(breaking)**.
 
 ## [Unreleased]
 
+### Added
+
+- Export the `today` agent skill as `skills.today` from the Nix flake.
+
 ## [0.1.0] - 2026-07-31
 
 The first tagged release. Everything below shipped before the project started

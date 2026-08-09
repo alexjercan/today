@@ -9,7 +9,7 @@ only; this CLI is the sole reader/writer of its markdown.
 - Examples/retention: runnable examples live in the owning task folder (`tasks/<id>/`) and are retained with that record; no top-level `examples/` or `scripts/`.
 - Domain docs: `README.md` for CLI surface; the-den markdown format is defined by `today/model.py` + the golden fixtures in `tests/fixtures/`.
 - Research/network: offline only - stdlib at runtime, no runtime deps, no network in code or checks; new deps need explicit user approval.
-- Checks/records: `nix flake check` (ruff + mypy + pytest) plus `tatr check`; write a retro into the task folder after. CI (`.github/workflows/check.yml`) runs the same `nix flake check` on master and every PR.
+- Checks/records: `nix flake check` (ruff + mypy + pytest); write a retro into the task folder after. Pinned tatr v2 has no `check` subcommand. CI (`.github/workflows/check.yml`) runs the same flake check on master and every PR.
 - Knowledge: central repo `/home/alex/personal/agent-knowledge`; project=today; tags=python,journal,cli,markdown. Advisory only; failed writes stay in RETRO.
 
 ## Changelog
@@ -40,6 +40,7 @@ On `master`, for version `X.Y.Z`:
 - `today/edit.py` - mutation ops (parse -> transform -> atomic write).
 - `tests/fixtures/` - real `Daily/*.md` entries paired with the live `daily --json`
   output; the parser is golden-tested against them.
+- `skills/today/` - agent-facing command guidance exported as `skills.today`.
 
 ## Conventions
 - Match the existing the-den markdown format exactly (read real entries; capture

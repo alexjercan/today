@@ -27,6 +27,18 @@ today note add "idea..." --tag ideas
 
 - Den path: `--den PATH`, else `$DEN_PATH`, else `~/personal/the-den`.
 
+## Agent skill
+
+The flake exports `skills.today` for agent workspaces that support external
+Agent Skills sources:
+
+```nix
+programs.agents.extraSkills.today = inputs.today.skills.today;
+```
+
+The skill documents the non-interactive command surface and prevents agents
+from opening the editor through bare `today`.
+
 ## Development
 
 Python via `pyproject-nix` + `uv2nix` (same setup as scufris):
