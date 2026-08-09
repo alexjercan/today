@@ -1,10 +1,8 @@
 # today: habit mutations (habit toggle/list)
 
+- STATUS: CLOSED
 - PRIORITY: 40
 - TAGS: feature, cli
-- ACTIVITY: COMPOUNDING
-- GATES: REVIEW RETRO
-- RESOLUTION: DONE
 
 ## Goal
 

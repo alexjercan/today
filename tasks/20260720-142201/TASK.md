@@ -1,10 +1,8 @@
 # today: weight (log + show/trend)
 
+- STATUS: CLOSED
 - PRIORITY: 40
 - TAGS: feature, cli
-- ACTIVITY: COMPOUNDING
-- GATES: REVIEW RETRO
-- RESOLUTION: DONE
 
 ## Goal
 

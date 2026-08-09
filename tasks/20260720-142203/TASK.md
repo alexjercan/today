@@ -1,10 +1,8 @@
 # today: notes with tags + search (note add/list --tag)
 
+- STATUS: CLOSED
 - PRIORITY: 40
 - TAGS: feature, cli
-- ACTIVITY: COMPOUNDING
-- GATES: REVIEW RETRO
-- RESOLUTION: DONE
 
 ## Goal
 

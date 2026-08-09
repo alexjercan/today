@@ -1,10 +1,8 @@
 # today: parity + templating hardening (more golden fixtures, carry-forward)
 
+- STATUS: CLOSED
 - PRIORITY: 30
 - TAGS: feature, cli
-- ACTIVITY: COMPOUNDING
-- GATES: REVIEW RETRO
-- RESOLUTION: DONE
 
 ## Goal
 

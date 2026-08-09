@@ -1,10 +1,8 @@
 # today: finalize nix packaging + swap dotfiles (uv.lock, overlay, delete today.nix/daily.nix)
 
+- STATUS: CLOSED
 - PRIORITY: 20
 - TAGS: infra, nix
-- ACTIVITY: COMPOUNDING
-- GATES: REVIEW RETRO
-- RESOLUTION: DONE
 
 ## Goal
 

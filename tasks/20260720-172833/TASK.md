@@ -1,10 +1,8 @@
 # Fix checks.pytest: package not importable in the nix sandbox
 
+- STATUS: CLOSED
 - PRIORITY: 60
 - TAGS: bug
-- ACTIVITY: COMPOUNDING
-- GATES: REVIEW RETRO
-- RESOLUTION: DONE
 
 ## Goal
 
