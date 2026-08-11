@@ -9,6 +9,8 @@ one line each. Breaking changes are tagged **(breaking)**.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-11
+
 ### Added
 
 - Export the `today` agent skill as `skills.today` from the Nix flake.
@@ -34,5 +36,6 @@ tagging.
 - Nix packaging: `nix run .`, a `today` package and a system-agnostic overlay for consumers.
 - `today --version`.
 
-[unreleased]: https://github.com/alexjercan/today/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/alexjercan/today/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/alexjercan/today/releases/tag/v0.2.0
 [0.1.0]: https://github.com/alexjercan/today/releases/tag/v0.1.0
