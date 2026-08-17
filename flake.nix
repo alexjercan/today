@@ -31,7 +31,7 @@
     };
 
     macros = {
-      url = "path:/home/alex/personal/macros.nvim";
+      url = "github:alexjercan/macros.nvim/v0.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
