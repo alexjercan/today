@@ -29,6 +29,11 @@
       url = "github:alexjercan/dashboardd/e68a4acdd73b5be73883f4fa435db26a2f16cbab";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    macros = {
+      url = "path:/home/alex/personal/macros.nvim";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs @ {
@@ -78,6 +83,7 @@
 
         dashboarddWidgetTool = inputs.dashboardd.packages.${system}.dashboardd-widget;
         dashboarddPackage = inputs.dashboardd.packages.${system}.dashboardd;
+        macrosPackage = inputs.macros.packages.${system}.default;
         frontendNodeModules = pkgs.importNpmLock.buildNodeModules {
           npmRoot = ./widget/frontend;
           nodejs = pkgs.nodejs_22;
@@ -100,6 +106,10 @@
             runHook postInstall
           '';
         };
+        widgetBackend = pkgs.writeShellScript "today-dashboardd-widget" ''
+          export MACROS_EXECUTABLE=${macrosPackage}/bin/macros
+          exec ${todayApp}/bin/today-dashboardd-widget "$@"
+        '';
         todayWidget = pkgs.runCommand "today-dashboardd-widget-0.1.0" {
           nativeBuildInputs = [dashboarddWidgetTool];
           meta.description = "Writable Today widgets for dashboardd";
@@ -107,7 +117,7 @@
           cp -R ${./widget} source
           chmod -R u+w source
           mkdir -p source/dist/bin source/frontend/dist
-          cp ${todayApp}/bin/today-dashboardd-widget source/dist/bin/
+          cp ${widgetBackend} source/dist/bin/today-dashboardd-widget
           cp -R ${widgetFrontend}/. source/frontend/dist/
           mkdir -p "$out/share/dashboardd/widgets"
           dashboardd-widget pack source/widget.toml \
@@ -165,6 +175,7 @@
             dashboardd-widget check "$bundle"
             test "$(jq '.variants | length' "$bundle/widget.json")" -eq 5
             test -x "$bundle/bin/today"
+            grep -q ${macrosPackage}/bin/macros "$bundle/bin/today"
             touch "$out"
           '';
           widget-catalog = pkgs.runCommand "today-widget-catalog-check" {

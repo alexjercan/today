@@ -15,6 +15,7 @@ one line each. Breaking changes are tagged **(breaking)**.
 
 ### Changed
 
+- **(breaking)** Replace manual dashboard macro entry with fuzzy food selection and quantity calculation through the packaged `macros` CLI.
 - **(breaking)** Schedule future tasks in dated daily files through `--date`; remove new Tomorrow writes and carry-forward.
 
 ## [0.2.0] - 2026-08-11

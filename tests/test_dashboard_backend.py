@@ -23,9 +23,33 @@ def _den(tmp_path: Path) -> Path:
     return den
 
 
+def _macros(tmp_path: Path) -> Path:
+    executable = tmp_path / "macros-fixture"
+    executable.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        "args = sys.argv[1:]\n"
+        "if args[:1] == ['search']:\n"
+        "    print(json.dumps({'results': ["
+        "{'id': 'egg:pc', 'name': 'egg', 'unit': 'pc'}, "
+        "{'id': 'egg whites:g', 'name': 'egg whites', 'unit': 'g'}]}))\n"
+        "elif args[:1] == ['calculate'] and args[args.index('--food') + 1] == 'egg:pc':\n"
+        "    amount = float(args[args.index('--amount') + 1])\n"
+        "    print(json.dumps({'food': 'egg', 'amount': amount, 'unit': 'pc', "
+        "'protein': 6 * amount, 'carbs': 0, 'fat': 5 * amount}))\n"
+        "else:\n"
+        "    print('Error: Unknown food ID', file=sys.stderr)\n"
+        "    raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    return executable
+
+
 def _start(tmp_path: Path) -> subprocess.Popen[str]:
     env = dict(os.environ)
     env["DEN_PATH"] = str(_den(tmp_path))
+    env["MACROS_EXECUTABLE"] = str(_macros(tmp_path))
     return subprocess.Popen(
         [sys.executable, "-m", "today.dashboard_backend"],
         stdin=subprocess.PIPE,
@@ -125,6 +149,60 @@ def test_backend_lifecycle_ping_and_write(tmp_path: Path) -> None:
         "status": "succeeded",
     }
     assert update["today"]["tasks"][0]["text"] == "from dashboard"
+    _shutdown(process)
+
+
+def test_backend_searches_and_calculates_food(tmp_path: Path) -> None:
+    process = _start(tmp_path)
+    payload = _initialize(process)
+    today = payload["today"]
+    _send(
+        process,
+        "message",
+        {
+            "instance_id": "today-1",
+            "payload": {
+                "command_id": "search-1",
+                "action": "food.search",
+                "data": {"query": "eg"},
+            },
+        },
+    )
+    result = _read(process)["data"]["payload"]["command_result"]
+    assert result == {
+        "command_id": "search-1",
+        "status": "succeeded",
+        "result": {
+            "kind": "food.search",
+            "query": "eg",
+            "candidates": [
+                {"id": "egg:pc", "name": "egg", "unit": "pc"},
+                {"id": "egg whites:g", "name": "egg whites", "unit": "g"},
+            ],
+        },
+    }
+    _send(
+        process,
+        "message",
+        {
+            "instance_id": "today-1",
+            "payload": {
+                "command_id": "food-1",
+                "action": "food.add",
+                "data": {
+                    "date": today["date"],
+                    "revision": today["revision"],
+                    "food_id": "egg:pc",
+                    "amount": 2,
+                },
+            },
+        },
+    )
+    added = _read(process)["data"]["payload"]
+    assert added["command_result"]["status"] == "succeeded"
+    assert added["today"]["foods"] == [
+        {"index": 1, "name": "egg 2pc", "protein": 12.0, "carbs": 0.0, "fat": 10.0}
+    ]
     _shutdown(process)
 
 

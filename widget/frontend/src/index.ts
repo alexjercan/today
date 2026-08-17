@@ -10,10 +10,17 @@ type Food = {
   fat: number;
 };
 type DatedTasks = { date: string; revision: string; tasks: Task[] };
+type FoodCandidate = { id: string; name: string; unit: "g" | "pc" };
+type FoodSearchResult = {
+  kind: "food.search";
+  query: string;
+  candidates: FoodCandidate[];
+};
 type CommandResult = {
   command_id: string;
   status: "succeeded" | "failed";
   error?: { code: string; message: string };
+  result?: FoodSearchResult;
 };
 type Snapshot = {
   schema_version: 1;
@@ -311,7 +318,39 @@ function parseCommandResult(value: unknown): CommandResult | null {
     if (!isRecord(value.error) || typeof value.error.code !== "string" || typeof value.error.message !== "string") return null;
     error = { code: value.error.code, message: value.error.message };
   }
-  return { command_id: value.command_id, status: value.status, error };
+  let result: FoodSearchResult | undefined;
+  if (value.result !== undefined) {
+    result = parseFoodSearchResult(value.result) ?? undefined;
+    if (result === undefined) return null;
+  }
+  return { command_id: value.command_id, status: value.status, error, result };
+}
+
+function parseFoodSearchResult(value: unknown): FoodSearchResult | null {
+  if (
+    !isRecord(value) ||
+    value.kind !== "food.search" ||
+    typeof value.query !== "string" ||
+    !Array.isArray(value.candidates)
+  )
+    return null;
+  const candidates = value.candidates.map(parseFoodCandidate);
+  return candidates.includes(null)
+    ? null
+    : {
+        kind: "food.search",
+        query: value.query,
+        candidates: candidates as FoodCandidate[],
+      };
+}
+
+function parseFoodCandidate(value: unknown): FoodCandidate | null {
+  return isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    (value.unit === "g" || value.unit === "pc")
+    ? { id: value.id, name: value.name, unit: value.unit }
+    : null;
 }
 
 function isMacros(value: unknown): value is Snapshot["today"]["macros"] {
@@ -526,17 +565,37 @@ header .status { min-height:0; }
 .total { min-width:0; text-align:center; }
 .total .metric { display:block; font-size:14px; }
 .total .label { color:var(--dashboardd-color-text-muted); font-size:9px; text-transform:uppercase; }
-.food-form { display:grid; grid-template-columns:minmax(90px, 1fr) repeat(3, minmax(42px, .35fr)) auto; }
+.food-form { display:grid; grid-template-columns:minmax(100px, 1fr) minmax(76px, .35fr) auto; }
 .food-form input { width:100%; }
 .food-form input, .food-form button { min-height:27px; padding-block:2px; }
+.food-picker { position:relative; min-width:0; }
+.suggestions { position:absolute; z-index:2; left:0; right:0; bottom:calc(100% + 4px); max-height:58px; overflow:auto; border:1px solid var(--dashboardd-color-border); border-radius:4px; background:var(--dashboardd-color-surface); box-shadow:0 8px 18px color-mix(in srgb, var(--dashboardd-color-canvas) 70%, transparent); }
+.suggestions:empty { display:none; }
+.suggestion { width:100%; min-height:27px; display:flex; justify-content:space-between; gap:8px; border:0; border-radius:0; text-align:left; }
+.suggestion.active { background:color-mix(in srgb, var(--dashboardd-color-accent) 16%, var(--dashboardd-color-surface)); color:var(--dashboardd-color-text-bright); }
+.suggestion .unit { color:var(--dashboardd-color-text-muted); }
+.quantity { position:relative; min-width:0; }
+.quantity input { padding-right:28px; }
+.quantity .unit { position:absolute; right:7px; top:50%; transform:translateY(-50%); color:var(--dashboardd-color-text-muted); font-size:11px; pointer-events:none; }
 .foods { display:none; min-height:0; flex:1 1 auto; }
 .foods .row { grid-template-columns:minmax(100px, 1fr) auto auto; }
 .food-macros { color:var(--dashboardd-color-text-muted); font-size:12px; }
 :host([data-presentation=focus]) article { gap:10px; padding:10px; }
 :host([data-presentation=focus]) .food-form input,
 :host([data-presentation=focus]) .food-form button { min-height:32px; padding-block:4px; }
+:host([data-presentation=focus]) .suggestions { max-height:220px; }
 :host([data-presentation=focus]) .foods { display:block; }
 `;
+
+type MacrosUiState = {
+  query: string;
+  amount: string;
+  selected: FoodCandidate | null;
+  candidates: FoodCandidate[];
+  highlighted: number;
+  searchCommandId: string | null;
+  focus: "food" | "amount" | null;
+};
 
 function mountMacros(
   container: HTMLElement,
@@ -544,6 +603,17 @@ function mountMacros(
 ): WidgetFrontend {
   const shadow = container.attachShadow({ mode: "open" });
   const state = initialState();
+  const ui: MacrosUiState = {
+    query: "",
+    amount: "",
+    selected: null,
+    candidates: [],
+    highlighted: 0,
+    searchCommandId: null,
+    focus: null,
+  };
+  let searchTimer: number | undefined;
+
   const render = (): void => {
     if (state.destroyed) return;
     const article = document.createElement("article");
@@ -603,20 +673,77 @@ function mountMacros(
       row.append(name, values, remove);
       foods.append(row);
     }
-    article.append(foods, foodForm(context, state, render));
+    article.append(foods, foodForm(context, state, ui, render, scheduleSearch));
     shadow.replaceChildren(macrosStyleElement(), article);
     setStatus(shadow, state);
+    if (ui.focus !== null) {
+      const selector = ui.focus === "food" ? "input[name=food]" : "input[name=amount]";
+      queueMicrotask(() => {
+        const input = shadow.querySelector<HTMLInputElement>(selector);
+        input?.focus();
+        if (input?.type === "text") {
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      });
+    }
   };
+
+  const scheduleSearch = (): void => {
+    if (searchTimer !== undefined) window.clearTimeout(searchTimer);
+    if (ui.query.trim().length < 2) return;
+    const query = ui.query.trim();
+    searchTimer = window.setTimeout(() => {
+      const commandId = createId();
+      ui.searchCommandId = commandId;
+      void context
+        .send({
+          command_id: commandId,
+          action: "food.search",
+          data: { query },
+        })
+        .catch((error: unknown) => {
+          if (state.destroyed || ui.searchCommandId !== commandId) return;
+          ui.searchCommandId = null;
+          state.error = error instanceof Error ? error.message : "Could not search";
+          render();
+        });
+    }, 200);
+  };
+
   render();
   return {
     update(payload: unknown): void {
-      if (applyUpdate(state, payload)) render();
+      const pending = state.pending;
+      if (!applyUpdate(state, payload)) return;
+      const result = state.snapshot?.command_result;
+      if (result?.command_id === ui.searchCommandId) {
+        ui.searchCommandId = null;
+        if (
+          result.status === "succeeded" &&
+          result.result?.kind === "food.search" &&
+          result.result.query === ui.query.trim()
+        ) {
+          ui.candidates = result.result.candidates;
+          ui.highlighted = 0;
+        } else if (result.status === "failed") {
+          state.error = result.error?.message ?? "Food search failed";
+        }
+      }
+      if (pending !== null && result?.command_id === pending && result.status === "succeeded") {
+        ui.query = "";
+        ui.amount = "";
+        ui.selected = null;
+        ui.candidates = [];
+        ui.focus = "food";
+      }
+      render();
     },
     setPresentation(presentation: WidgetPresentation): void {
       shadow.host.setAttribute("data-presentation", presentation);
     },
     destroy(): void {
       state.destroyed = true;
+      if (searchTimer !== undefined) window.clearTimeout(searchTimer);
       shadow.replaceChildren();
     },
   };
@@ -625,41 +752,128 @@ function mountMacros(
 function foodForm(
   context: WidgetContext,
   state: ReturnType<typeof initialState>,
+  ui: MacrosUiState,
   render: () => void,
+  scheduleSearch: () => void,
 ): HTMLFormElement {
   const form = document.createElement("form");
   form.className = "food-form";
-  const fields: Array<[string, string, string]> = [
-    ["food", "Food", "text"],
-    ["protein", "P", "number"],
-    ["carbs", "C", "number"],
-    ["fat", "F", "number"],
-  ];
-  const inputs = new Map<string, HTMLInputElement>();
-  for (const [name, placeholder, type] of fields) {
-    const input = document.createElement("input");
-    input.name = name;
-    input.type = type;
-    input.placeholder = placeholder;
-    input.setAttribute("aria-label", name);
-    if (type === "number") input.step = "any";
-    input.disabled = state.pending !== null || state.snapshot === null;
-    inputs.set(name, input);
-    form.append(input);
-  }
+
+  const picker = document.createElement("div");
+  picker.className = "food-picker";
+  const food = document.createElement("input");
+  food.name = "food";
+  food.type = "text";
+  food.placeholder = "Food";
+  food.autocomplete = "off";
+  food.value = ui.query;
+  food.disabled = state.pending !== null || state.snapshot === null;
+  food.setAttribute("role", "combobox");
+  food.setAttribute("aria-label", "Food");
+  food.setAttribute("aria-autocomplete", "list");
+  food.setAttribute("aria-expanded", String(ui.candidates.length > 0));
+  food.setAttribute("aria-controls", "food-suggestions");
+  const suggestions = document.createElement("div");
+  suggestions.id = "food-suggestions";
+  suggestions.className = "suggestions";
+  suggestions.setAttribute("role", "listbox");
+
+  const selectCandidate = (candidate: FoodCandidate): void => {
+    ui.selected = candidate;
+    ui.query = candidate.name;
+    ui.amount = candidate.unit === "pc" ? "1" : "100";
+    ui.candidates = [];
+    ui.focus = "amount";
+    render();
+  };
+  ui.candidates.forEach((candidate, index) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = `suggestion${index === ui.highlighted ? " active" : ""}`;
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", String(index === ui.highlighted));
+    const name = document.createElement("span");
+    name.textContent = candidate.name;
+    const unit = document.createElement("span");
+    unit.className = "unit";
+    unit.textContent = candidate.unit === "pc" ? "pieces" : "grams";
+    option.append(name, unit);
+    option.addEventListener("mousedown", (event) => event.preventDefault());
+    option.addEventListener("click", () => selectCandidate(candidate));
+    suggestions.append(option);
+  });
+  food.addEventListener("input", () => {
+    ui.query = food.value;
+    ui.selected = null;
+    ui.candidates = [];
+    ui.highlighted = 0;
+    ui.focus = "food";
+    suggestions.replaceChildren();
+    food.setAttribute("aria-expanded", "false");
+    scheduleSearch();
+  });
+  food.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" && ui.candidates.length > 0) {
+      event.preventDefault();
+      ui.highlighted = (ui.highlighted + 1) % ui.candidates.length;
+      ui.focus = "food";
+      render();
+    } else if (event.key === "ArrowUp" && ui.candidates.length > 0) {
+      event.preventDefault();
+      ui.highlighted =
+        (ui.highlighted - 1 + ui.candidates.length) % ui.candidates.length;
+      ui.focus = "food";
+      render();
+    } else if (event.key === "Enter" && ui.candidates.length > 0) {
+      event.preventDefault();
+      selectCandidate(ui.candidates[ui.highlighted]);
+    } else if (event.key === "Escape") {
+      ui.candidates = [];
+      suggestions.replaceChildren();
+      food.setAttribute("aria-expanded", "false");
+    }
+  });
+  picker.append(food, suggestions);
+
+  const quantity = document.createElement("div");
+  quantity.className = "quantity";
+  const amount = document.createElement("input");
+  amount.name = "amount";
+  amount.type = "number";
+  amount.step = "any";
+  amount.min = "0";
+  amount.placeholder = "Quantity";
+  amount.value = ui.amount;
+  amount.disabled =
+    state.pending !== null || state.snapshot === null || ui.selected === null;
+  amount.setAttribute("aria-label", "Quantity");
+  amount.addEventListener("input", () => {
+    ui.amount = amount.value;
+    ui.focus = "amount";
+  });
+  const unit = document.createElement("span");
+  unit.className = "unit";
+  unit.textContent = ui.selected?.unit === "pc" ? "pc" : ui.selected ? "g" : "";
+  quantity.append(amount, unit);
+
+  const numericAmount = Number(ui.amount);
   const button = document.createElement("button");
   button.type = "submit";
   button.textContent = "Add";
-  button.disabled = state.pending !== null || state.snapshot === null;
-  form.append(button);
+  button.disabled =
+    state.pending !== null ||
+    state.snapshot === null ||
+    ui.selected === null ||
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0;
+
+  form.append(picker, quantity, button);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const today = state.snapshot?.today;
-    const food = inputs.get("food")?.value.trim() ?? "";
-    const protein = inputs.get("protein")?.value.trim() ?? "";
-    const carbs = inputs.get("carbs")?.value.trim() ?? "";
-    const fat = inputs.get("fat")?.value.trim() ?? "";
-    if (!today || !food || !protein || !carbs || !fat) return;
+    const selected = ui.selected;
+    const value = Number(ui.amount);
+    if (!today || !selected || !Number.isFinite(value) || value <= 0) return;
     sendCommand(
       context,
       state,
@@ -667,7 +881,8 @@ function foodForm(
       {
         date: today.date,
         revision: today.revision,
-        row: `${food},${protein},${carbs},${fat}`,
+        food_id: selected.id,
+        amount: value,
       },
       render,
     );

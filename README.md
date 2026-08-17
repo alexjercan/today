@@ -54,7 +54,10 @@ lib.makeSearchPath "share/dashboardd/widgets" [
 
 The Python backend inherits `DEN_PATH`; otherwise it uses
 `~/personal/the-den`. Starting a Today widget ensures the current daily entry
-exists. Dated Upcoming writes create the selected future entry.
+exists. Dated Upcoming writes create the selected future entry. Macros food
+entry uses the packaged `macros` CLI for fuzzy autocomplete, gram or piece
+quantities, and automatic nutrient calculation. Its database defaults to
+`~/.local/share/nvim/macros.csv`; set `MACROS_DATABASE` to override it.
 
 ## Agent skill
 
