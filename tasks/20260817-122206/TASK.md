@@ -428,3 +428,69 @@ Manual product proof:
 - Duplicating the-den parsing in dashboardd or frontend code.
 - Non-Nix binary distribution beyond the existing source-build workflow.
 - nix.dotfiles installation before product review.
+
+## Implementation notes
+
+Implemented on `master` in four initial slices:
+
+- `9c93498` adds the dated application API, race-safe entry creation, direct
+  future-file scheduling, food retention/removal, CLI changes, and tests.
+- `ebf90d7` adds the Python dashboardd backend and lifecycle tests.
+- `2877e90` adds the TypeScript frontends and source manifest.
+- `5a914ed` pins dashboardd and adds the reproducible Nix widget package and
+  composition checks.
+
+The dashboardd dependency was already available at remote commit `e68a4ac`, so
+Today pins that exact revision. The frontend lock uses the released SDK v0.1.0
+tarball. Nix uses `importNpmLock.buildNodeModules`, which avoids a manually
+maintained aggregate npm dependency hash.
+
+The source frontend is one self-contained variant dispatcher. The initial
+multi-file TypeScript output imported `shared.js`, but the public packer copies
+only each declared variant entry artifact. Browser testing caught the missing
+runtime module. Consolidating the implementation keeps every packed variant
+self-contained without adding a bundler. Each manifest variant references the
+same built module; the packer installs independent stable variant filenames.
+
+A frontend mount sends an explicit `refresh` command. The first browser test
+showed that an update emitted before a browser event stream connects is not
+replayed by dashboardd. Explicit refresh makes direct dashboard and Focus URLs
+load current state immediately. Polling still synchronizes file changes among
+separate variant backend processes.
+
+The weight history uses the CLI's established seven-day default. The Upcoming
+calendar uses ISO Monday-first weeks. Visual testing compressed the 3x1 Macros
+header and controls and prevented 1x1 Weight values from wrapping on a
+three-column phone dashboard.
+
+## Evidence
+
+`nix flake check -L` passes all 12 checks on x86_64-linux:
+
+- Ruff.
+- Mypy across 12 Python source files.
+- 102 pytest tests.
+- TypeScript frontend build.
+- Static bundle pack/check.
+- Packaged dashboardd catalog composition with all five variants.
+
+A packaged dashboardd instance was composed from its built-in widget root and
+Today's independent Nix widget root against a temporary den. Browser automation
+proved normal-mode writes for task and habit toggles, food addition, weight
+replacement, and dated task creation. It also opened Tasks, Macros, Upcoming,
+and Weight Focus directly, rejected horizontal phone overflow, and reported no
+page errors.
+
+Review artifacts:
+
+- `artifacts/today-dashboard-desktop.png`
+- `artifacts/today-dashboard-phone.png`
+- `artifacts/today-tasks-focus.png`
+- `artifacts/today-macros-focus.png`
+- `artifacts/today-upcoming-focus.png`
+- `artifacts/today-weight-focus.png`
+
+## Pending review
+
+User visual and mobile interaction review is the remaining stop. nix.dotfiles
+integration and task close-out remain after approval.
