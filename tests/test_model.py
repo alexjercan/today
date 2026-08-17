@@ -57,6 +57,21 @@ def test_only_standard_checkboxes_are_tasks(tmp_path: Path) -> None:
     ]
 
 
+def test_parse_macros_retains_valid_food_rows(tmp_path: Path) -> None:
+    path = tmp_path / "2026-07-20-Monday.md"
+    path.write_text(
+        "# D\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\n"
+        "eggs,12,1,10\ninvalid,nope,1,1\nrice,3,40,1\n\n### 📝 Notes\n\n",
+        encoding="utf-8",
+    )
+    day = parse_day(path)
+    assert [food.to_dict() for food in day.foods] == [
+        {"index": 1, "name": "eggs", "protein": 12.0, "carbs": 1.0, "fat": 10.0},
+        {"index": 2, "name": "rice", "protein": 3.0, "carbs": 40.0, "fat": 1.0},
+    ]
+    assert "foods" not in day.to_dict()
+
+
 def test_parse_macros_survives_non_finite_row(tmp_path: Path) -> None:
     """A hand-edited file with an inf/nan macro must not crash the reader (the
     calorie round() would otherwise throw); the bad row is skipped."""

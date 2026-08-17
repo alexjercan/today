@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tomllib
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -77,63 +78,43 @@ def test_title_pads_day_of_month_to_two_digits() -> None:
         assert title_for(off) == expected
 
 
-def test_carry_forward_turns_tomorrow_into_today(tmp_path: Path) -> None:
+def test_create_does_not_carry_tomorrow_forward(tmp_path: Path) -> None:
     den = _den(tmp_path)
-    # Yesterday has a Tomorrow list; creating today should carry it into Today.
-    prev = entry_path(den, -1)
-    prev.write_text(
+    entry_path(den, -1).write_text(
         "# yesterday\n\n### 📝 Notes\n\nTomorrow\n- ship the thing\n",
         encoding="utf-8",
     )
     main(["--den", str(den), "create"])
     from today.model import parse_day
 
-    day = parse_day(entry_path(den, 0))
-    assert [t.text for t in day.tasks] == ["ship the thing"]
+    assert parse_day(entry_path(den, 0)).tasks == []
 
 
-def test_carry_forward_no_previous_entry_is_clean(tmp_path: Path) -> None:
-    """No yesterday file: create still succeeds with an empty Today (old today
-    warns and skips the carry-over)."""
-    from today.model import parse_day
-
+def test_explicit_date_targets_that_daily_file(tmp_path: Path, capsys) -> None:
     den = _den(tmp_path)
-    assert not entry_path(den, -1).exists()
-    rc = main(["--den", str(den), "create"])
+    rc = main(
+        [
+            "--den",
+            str(den),
+            "--date",
+            "2030-05-07",
+            "task",
+            "add",
+            "scheduled",
+            "--json",
+        ]
+    )
     assert rc == 0
-    day = parse_day(entry_path(den, 0))
-    assert day.tasks == []
-    assert "Today" not in entry_path(den, 0).read_text()  # no empty Today marker
+    assert json.loads(capsys.readouterr().out)[0]["text"] == "scheduled"
+    path = den / "Daily" / "2030-05-07-Tuesday.md"
+    assert path.is_file()
+    assert "- [ ] scheduled" in path.read_text(encoding="utf-8")
 
 
-def test_carry_forward_empty_tomorrow_carries_nothing(tmp_path: Path) -> None:
-    """Yesterday has a Tomorrow header but no bullets: nothing is carried."""
-    from today.model import parse_day
-
-    den = _den(tmp_path)
-    entry_path(den, -1).write_text(
-        "# yesterday\n\n### 📝 Notes\n\nTomorrow\n\nsome prose\n", encoding="utf-8"
-    )
-    main(["--den", str(den), "create"])
-    day = parse_day(entry_path(den, 0))
-    assert day.tasks == []
-
-
-def test_carry_forward_multiple_tomorrow_items(tmp_path: Path) -> None:
-    from today.model import parse_day
-
-    den = _den(tmp_path)
-    entry_path(den, -1).write_text(
-        "# yesterday\n\n### 📝 Notes\n\nTomorrow\n- one\n- two\n- three\n",
-        encoding="utf-8",
-    )
-    main(["--den", str(den), "create"])
-    day = parse_day(entry_path(den, 0))
-    assert [(t.index, t.text, t.done) for t in day.tasks] == [
-        (1, "one", False),
-        (2, "two", False),
-        (3, "three", False),
-    ]
+def test_date_and_offset_are_mutually_exclusive() -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--date", "2030-05-07", "-N", "1", "path"])
+    assert exc.value.code == 2
 
 
 def test_note_add_then_list_roundtrips(tmp_path: Path, capsys) -> None:
@@ -172,7 +153,10 @@ def test_note_list_does_not_include_tasks_or_weight(tmp_path: Path, capsys) -> N
     """Notes listing must ignore the Today/Tomorrow lists and the weight line."""
     den = _den(tmp_path)
     main(["--den", str(den), "task", "add", "a today task"])
-    main(["--den", str(den), "task", "add", "a tomorrow task", "--tomorrow"])
+    entry_path(den, 0).write_text(
+        entry_path(den, 0).read_text() + "\nTomorrow\n- a historical tomorrow task\n",
+        encoding="utf-8",
+    )
     main(["--den", str(den), "weight", "75"])
     main(["--den", str(den), "note", "add", "the only note"])
     capsys.readouterr()
@@ -497,15 +481,15 @@ def test_task_add_appends_a_today_checkbox(tmp_path: Path, capsys) -> None:
     ]
 
 
-def test_task_add_tomorrow_uses_a_plain_bullet(tmp_path: Path) -> None:
-    from today.model import parse_day
-
+def test_upcoming_lists_future_incomplete_tasks(tmp_path: Path, capsys) -> None:
     den = _den(tmp_path)
-    main(["--den", str(den), "task", "add", "ship it", "--tomorrow"])
-    text = entry_path(den, 0).read_text()
-    assert "\nTomorrow\n- ship it\n" in text
-    day = parse_day(entry_path(den, 0))
-    assert [t.text for t in day.tomorrow] == ["ship it"]
+    future = (day_for(0) + timedelta(days=2)).isoformat()
+    main(["--den", str(den), "--date", future, "task", "add", "ship it"])
+    capsys.readouterr()
+    rc = main(["--den", str(den), "upcoming", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert [(item["date"], item["text"]) for item in out] == [(future, "ship it")]
 
 
 def test_task_done_toggles_the_checkbox(tmp_path: Path, capsys) -> None:
@@ -581,6 +565,7 @@ def test_parser_exposes_the_full_command_surface() -> None:
         "weight",
         "macros",
         "note",
+        "upcoming",
     } <= set(sub.choices or ())
 
 

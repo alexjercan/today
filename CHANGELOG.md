@@ -9,6 +9,14 @@ one line each. Breaking changes are tagged **(breaking)**.
 
 ## [Unreleased]
 
+### Added
+
+- Add writable dashboardd widgets for tasks, habits, macros, weight, and dated upcoming tasks.
+
+### Changed
+
+- **(breaking)** Schedule future tasks in dated daily files through `--date`; remove new Tomorrow writes and carry-forward.
+
 ## [0.2.0] - 2026-08-11
 
 ### Added

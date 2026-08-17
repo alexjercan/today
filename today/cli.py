@@ -1,15 +1,9 @@
-"""The `today` command: one entry point for the-den journal.
-
-Bare `today` opens today's entry in ``$EDITOR`` (creating it from the template
-first); the subcommands are non-interactive and machine-readable (``--json``), so
-an agent/tool only ever calls subcommands, never the editor.
-"""
+"""The non-interactive and editor command surface for the-den."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import re
 import subprocess
@@ -17,19 +11,15 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-from today import __version__, edit
-from today.model import Habit, Task, TomorrowTask, parse_day
+from today import __version__, application
+from today.model import Day, Habit, Task
 
-DEFAULT_DEN = Path.home() / "personal" / "the-den"
+DEFAULT_DEN = application.DEFAULT_DEN
 DEFAULT_EDITOR = "nvim"
 
-
-def resolve_den(arg: str | None) -> Path:
-    """Den directory: --den, then $DEN_PATH, then the default."""
-    if arg:
-        return Path(arg).expanduser()
-    env = os.environ.get("DEN_PATH")
-    return Path(env).expanduser() if env else DEFAULT_DEN
+resolve_den = application.resolve_den
+_normalize_weight = application.normalize_weight
+_normalize_macros_row = application.normalize_macros_row
 
 
 def day_for(offset: int) -> date:
@@ -37,67 +27,44 @@ def day_for(offset: int) -> date:
 
 
 def stem_for(offset: int) -> str:
-    return day_for(offset).strftime("%Y-%m-%d-%A")
+    return application.stem_for(day_for(offset))
 
 
 def title_for(offset: int) -> str:
-    d = day_for(offset)
-    # Zero-padded day of month ("%d") - the-den's real titles are padded
-    # ("Friday, January 02, 2026"), matching the old today's `date +%d`.
-    return d.strftime("%A, %B %d, %Y")
+    return application.title_for(day_for(offset))
 
 
 def entry_path(den: Path, offset: int) -> Path:
-    return den / "Daily" / f"{stem_for(offset)}.md"
-
-
-def _template(den: Path) -> str:
-    tpl = den / "Templates" / "daily.md"
-    if tpl.is_file():
-        return tpl.read_text(encoding="utf-8")
-    # Minimal fallback template if the den has none.
-    return "# {{title}}\n\n### 🌱 Habits\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\n\n### 📝 Notes\n\n"
-
-
-def _carry_forward(den: Path, offset: int) -> list[str]:
-    """Yesterday's Tomorrow list becomes today's Today list, as `- [ ]` items."""
-    prev = entry_path(den, offset - 1)
-    if not prev.is_file():
-        return []
-    day = parse_day(prev)
-    return [f"- [ ] {t.text}" for t in day.tomorrow]
+    return application.entry_path(den, day_for(offset))
 
 
 def ensure_entry(den: Path, offset: int) -> Path:
-    """Create the entry from the template (title + carry-forward) if missing."""
-    path = entry_path(den, offset)
-    if path.is_file():
-        return path
-    path.parent.mkdir(parents=True, exist_ok=True)
-    body = _template(den).replace("{{title}}", title_for(offset))
-    carried = _carry_forward(den, offset)
-    if carried:
-        body = body.rstrip("\n") + "\n\nToday\n" + "\n".join(carried) + "\n"
-    path.write_text(body, encoding="utf-8")
-    return path
+    return application.ensure_day(den, day_for(offset))
+
+
+def _target(args: argparse.Namespace) -> date:
+    return application.resolve_date(args.date, args.offset)
+
+
+def _read(args: argparse.Namespace) -> tuple[Path, date, Day, str]:
+    den = resolve_den(args.den)
+    target = _target(args)
+    day, current = application.read_day(den, target)
+    return den, target, day, current
 
 
 def _cmd_path(args: argparse.Namespace) -> int:
-    den = resolve_den(args.den)
-    print(entry_path(den, args.offset))
+    print(application.entry_path(resolve_den(args.den), _target(args)))
     return 0
 
 
 def _cmd_create(args: argparse.Namespace) -> int:
-    den = resolve_den(args.den)
-    print(ensure_entry(den, args.offset))
+    print(application.ensure_day(resolve_den(args.den), _target(args)))
     return 0
 
 
 def _cmd_show(args: argparse.Namespace) -> int:
-    den = resolve_den(args.den)
-    path = ensure_entry(den, args.offset)
-    day = parse_day(path)
+    _den, _target_date, day, _revision = _read(args)
     if args.json:
         print(json.dumps(day.to_dict(), ensure_ascii=False))
     else:
@@ -110,8 +77,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
 
 
 def _cmd_edit(args: argparse.Namespace) -> int:
-    den = resolve_den(args.den)
-    path = ensure_entry(den, args.offset)
+    path = application.ensure_day(resolve_den(args.den), _target(args))
     if args.no_edit:
         print(path)
         return 0
@@ -123,154 +89,96 @@ def _cmd_edit(args: argparse.Namespace) -> int:
         return 1
 
 
-def _print_tasks(items: list[Task] | list[TomorrowTask]) -> None:
-    """Human-readable listing of a Today/Tomorrow slice after a mutation."""
+def _print_tasks(items: list[Task]) -> None:
     if not items:
         print("(empty)")
         return
     for item in items:
-        if isinstance(item, Task):
-            box = "[x]" if item.done else "[ ]"
-            print(f"{item.index}. {box} {item.text}")
-        else:
-            print(f"{item.index}. {item.text}")
+        box = "[x]" if item.done else "[ ]"
+        print(f"{item.index}. {box} {item.text}")
 
 
 def _cmd_task(args: argparse.Namespace) -> int:
-    """add/done/rm a task in today's (or --tomorrow's) list, then report it."""
     den = resolve_den(args.den)
-    path = ensure_entry(den, args.offset)
-    text = path.read_text(encoding="utf-8")
-    tomorrow = getattr(args, "tomorrow", False)
-    marker = edit.TOMORROW if tomorrow else edit.TODAY
-
+    target = _target(args)
+    _day, current = application.read_day(den, target)
     try:
         if args.action == "add":
-            updated = edit.add_item(text, args.text, marker)
+            day, _revision = application.add_task(den, target, args.text, current)
         elif args.action == "rm":
-            updated = edit.remove_item(text, args.index, marker)
-        else:  # done - today-only, toggles the checkbox
-            updated = edit.toggle_item(text, args.index)
-    except IndexError as exc:
+            day, _revision = application.remove_task(den, target, args.index, current)
+        else:
+            day, _revision = application.toggle_task(den, target, args.index, current)
+    except (IndexError, ValueError, application.RevisionConflict) as exc:
         print(f"today task: {exc}", file=sys.stderr)
         return 1
-
-    if updated != text:
-        edit.atomic_write(path, updated)
-
-    day = parse_day(path)
-    slice_: list[Task] | list[TomorrowTask] = day.tomorrow if tomorrow else day.tasks
     if args.json:
-        print(json.dumps([t.to_dict() for t in slice_], ensure_ascii=False))
+        print(json.dumps([task.to_dict() for task in day.tasks], ensure_ascii=False))
     else:
-        _print_tasks(slice_)
+        _print_tasks(day.tasks)
     return 0
 
 
 def _print_habits(habits: list[Habit]) -> None:
-    """Human-readable listing of habits and their done state."""
     if not habits:
         print("(no habits)")
         return
-    for h in habits:
-        box = "[x]" if h.done else "[ ]"
-        print(f"{box} {h.name}")
+    for habit in habits:
+        box = "[x]" if habit.done else "[ ]"
+        print(f"{box} {habit.name}")
 
 
 def _cmd_habit(args: argparse.Namespace) -> int:
-    """toggle a habit's checkbox (by name) or list habits, then report them."""
     den = resolve_den(args.den)
-    path = ensure_entry(den, args.offset)
-
+    target = _target(args)
+    day, current = application.read_day(den, target)
     if args.haction == "toggle":
-        text = path.read_text(encoding="utf-8")
         try:
-            updated = edit.toggle_habit(text, args.name)
+            day, _revision = application.toggle_habit(den, target, args.name, current)
         except KeyError:
             print(f"habit: no habit matching {args.name!r}", file=sys.stderr)
             return 1
-        if updated != text:
-            edit.atomic_write(path, updated)
-
-    day = parse_day(path)
+        except application.RevisionConflict as exc:
+            print(f"habit: {exc}", file=sys.stderr)
+            return 1
     if args.json:
-        print(json.dumps([h.to_dict() for h in day.habits], ensure_ascii=False))
+        print(json.dumps([habit.to_dict() for habit in day.habits], ensure_ascii=False))
     else:
         _print_habits(day.habits)
     return 0
 
 
-def _normalize_weight(value: str) -> str:
-    """Normalize a user weight into the stored numeric string.
-
-    Accepts "75", "75Kg", "75 kg", "75.5"; strips the unit and ensures a decimal
-    point (so "75" -> "75.0"), mirroring the old ``daily --weight-entry``. The
-    result is validated against the *exact* grammar the parser reads back
-    (``model._WEIGHT``: non-negative integer or decimal), so we never write a
-    line ``parse_day`` cannot read - ``float()`` would wrongly accept ``inf``,
-    ``nan``, ``1e3``, ``-3`` and underscores. Raises ``ValueError`` otherwise.
-    """
-    cleaned = re.sub(r"(?i)\s*kg\s*$", "", value.strip()).strip()
-    normalized = cleaned if "." in cleaned else f"{cleaned}.0"
-    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", normalized):
-        raise ValueError(value)
-    return normalized
-
-
-def _collect_weights(den: Path, base_offset: int, days: int) -> list[tuple[str, float]]:
-    """Recorded (date-stem, weight) over the ``days`` ending at ``base_offset``.
-
-    Oldest first, skipping days with no entry file or no logged weight. Reads
-    existing files only - never creates one.
-    """
-    out: list[tuple[str, float]] = []
-    for delta in range(days - 1, -1, -1):
-        path = entry_path(den, base_offset - delta)
-        if not path.is_file():
-            continue
-        day = parse_day(path)
-        if day.weight is not None:
-            out.append((day.date, day.weight))
-    return out
-
-
 def _print_weight_trend(recent: list[tuple[str, float]], change: float | None) -> None:
-    """Human-readable weight history + net change over the window."""
     if not recent:
         print("(no weight logged)")
         return
-    for stem, weight in recent:
-        print(f"{stem}: {weight} Kg")
+    for day_value, weight in recent:
+        print(f"{day_value}: {weight} Kg")
     if change is not None:
         sign = "+" if change > 0 else ""
         print(f"change: {sign}{round(change, 2)} Kg over {len(recent)} entries")
 
 
 def _cmd_weight(args: argparse.Namespace) -> int:
-    """Log the day's weight (``today weight <value>``) or show the recent trend
-    (bare ``today weight``)."""
     den = resolve_den(args.den)
-
+    target = _target(args)
     if args.value is not None:
+        day, current = application.read_day(den, target)
         try:
-            value = _normalize_weight(args.value)
+            day, _revision = application.set_weight(den, target, args.value, current)
         except ValueError:
             print(f"weight: not a number: {args.value!r}", file=sys.stderr)
             return 1
-        path = ensure_entry(den, args.offset)
-        text = path.read_text(encoding="utf-8")
-        updated = edit.set_weight(text, value)
-        if updated != text:
-            edit.atomic_write(path, updated)
-        day = parse_day(path)
+        except application.RevisionConflict as exc:
+            print(f"weight: {exc}", file=sys.stderr)
+            return 1
         if args.json:
             print(json.dumps({"date": day.date, "weight": day.weight}))
         else:
             print(f"logged weight: {day.weight} Kg")
         return 0
 
-    # No value: show the recent trend over the last --days entries.
-    recent = _collect_weights(den, args.offset, args.days)
+    recent = application.weight_history(den, target, args.days)
     latest = recent[-1][1] if recent else None
     change = recent[-1][1] - recent[0][1] if len(recent) >= 2 else None
     if args.json:
@@ -279,7 +187,10 @@ def _cmd_weight(args: argparse.Namespace) -> int:
                 {
                     "weight": latest,
                     "change": change,
-                    "recent": [{"date": d, "weight": w} for d, w in recent],
+                    "recent": [
+                        {"date": day_value, "weight": weight}
+                        for day_value, weight in recent
+                    ],
                 }
             )
         )
@@ -288,68 +199,31 @@ def _cmd_weight(args: argparse.Namespace) -> int:
     return 0
 
 
-def _normalize_macros_row(row: str) -> str:
-    """Validate and normalize a ``what,protein,carbs,fat`` macros row.
-
-    The protein/carbs/fat cells must be *finite* numbers - the reader's grammar
-    is ``float()`` composed with ``round()`` (``model._parse_macros`` sums the
-    cells then rounds for calories), and ``round()`` throws on ``inf``/``nan``
-    even though ``float()`` accepts them. Rejecting non-finite values here means
-    we never write a row that later crashes ``parse_day``. The food name must not
-    be ``what`` (the parser treats a leading ``what,`` as the table header and
-    skips it). Returns the cleaned ``what,protein,carbs,fat`` line; raises
-    ``ValueError`` on a bad row.
-    """
-    cells = [c.strip() for c in row.split(",")]
-    if len(cells) < 4:
-        raise ValueError("expected what,protein,carbs,fat")
-    for label, cell in zip(("protein", "carbs", "fat"), cells[1:4], strict=True):
-        try:
-            value = float(cell)
-        except ValueError:
-            raise ValueError(f"{label} is not a number: {cell!r}") from None
-        if not math.isfinite(value):
-            raise ValueError(f"{label} is not a finite number: {cell!r}")
-    if cells[0] == "what":
-        raise ValueError("food name 'what' collides with the table header")
-    return ",".join(cells[:4])
-
-
 def _cmd_macros(args: argparse.Namespace) -> int:
-    """Append a macros row (``today macros add <row>``) or report the aggregate
-    (bare ``today macros``)."""
     den = resolve_den(args.den)
-    path = ensure_entry(den, args.offset)
-
-    if getattr(args, "maction", None) == "add":
-        try:
-            row = _normalize_macros_row(args.row)
-        except ValueError as exc:
-            print(f"macros: {exc}", file=sys.stderr)
-            return 1
-        text = path.read_text(encoding="utf-8")
-        try:
-            updated = edit.add_macros_row(text, row)
-        except LookupError as exc:
-            print(f"macros: {exc}", file=sys.stderr)
-            return 1
-        if updated != text:
-            edit.atomic_write(path, updated)
-
-    day = parse_day(path)
+    target = _target(args)
+    day, current = application.read_day(den, target)
+    action = getattr(args, "maction", None)
+    try:
+        if action == "add":
+            day, _revision = application.add_food(den, target, args.row, current)
+        elif action == "rm":
+            day, _revision = application.remove_food(den, target, args.index, current)
+    except (ValueError, LookupError, IndexError, application.RevisionConflict) as exc:
+        print(f"macros: {exc}", file=sys.stderr)
+        return 1
     if getattr(args, "json", False):
         print(json.dumps(day.macros.to_dict()))
     else:
-        m = day.macros
+        macros = day.macros
         print(
-            f"protein: {m.protein}  carbs: {m.carbs}  fat: {m.fat}  "
-            f"calories: {m.calories}"
+            f"protein: {macros.protein}  carbs: {macros.carbs}  "
+            f"fat: {macros.fat}  calories: {macros.calories}"
         )
     return 0
 
 
 def _print_notes(notes: list[tuple[str, str | None]]) -> None:
-    """Human-readable listing of notes, tag first when present."""
     if not notes:
         print("(no notes)")
         return
@@ -358,11 +232,9 @@ def _print_notes(notes: list[tuple[str, str | None]]) -> None:
 
 
 def _cmd_note(args: argparse.Namespace) -> int:
-    """Append a note (``today note add <text> [--tag T]``) or list/search notes
-    (``today note list [--tag T]``)."""
     den = resolve_den(args.den)
-    path = ensure_entry(den, args.offset)
-
+    target = _target(args)
+    _day, current = application.read_day(den, target)
     if args.naction == "add":
         if not args.text.strip():
             print("note: note text must not be empty", file=sys.stderr)
@@ -373,189 +245,155 @@ def _cmd_note(args: argparse.Namespace) -> int:
                 print("note: tag must be a single word", file=sys.stderr)
                 return 1
             tag = args.tag.strip()
-            # Keep the appended `note :: <tag>` marker the single source of
-            # truth (writer-honors-reader): a text that already carries a marker
-            # would make iter_notes read the wrong tag back.
             if re.search(r"note\s*::", args.text, re.IGNORECASE):
                 print(
                     "note: text may not contain a 'note ::' marker with --tag",
                     file=sys.stderr,
                 )
                 return 1
-        text = path.read_text(encoding="utf-8")
-        updated = edit.add_note(text, args.text, tag)
-        if updated != text:
-            edit.atomic_write(path, updated)
-
-    notes = edit.iter_notes(path.read_text(encoding="utf-8"))
+        try:
+            notes, _revision = application.add_note(
+                den, target, args.text, tag, current
+            )
+        except application.RevisionConflict as exc:
+            print(f"note: {exc}", file=sys.stderr)
+            return 1
+    else:
+        notes = application.list_notes(den, target)
     if args.naction == "list" and args.tag is not None:
-        wanted = args.tag.strip()
-        notes = [(t, g) for (t, g) in notes if g == wanted]
+        notes = [(text, tag) for text, tag in notes if tag == args.tag.strip()]
     if args.json:
-        print(json.dumps([{"text": t, "tag": g} for t, g in notes], ensure_ascii=False))
+        print(
+            json.dumps(
+                [{"text": text, "tag": tag} for text, tag in notes],
+                ensure_ascii=False,
+            )
+        )
     else:
         _print_notes(notes)
     return 0
 
 
+def _cmd_upcoming(args: argparse.Namespace) -> int:
+    items = application.list_upcoming(resolve_den(args.den), _target(args))
+    if args.json:
+        print(json.dumps([item.to_dict() for item in items], ensure_ascii=False))
+    elif not items:
+        print("(no upcoming tasks)")
+    else:
+        for item in items:
+            print(f"{item.date}  {item.index}. [ ] {item.text}")
+    return 0
+
+
 def _add_task_parser(sub: argparse._SubParsersAction) -> None:
-    """`today task {add,done,rm}` - mutate the Today (or --tomorrow) list."""
-    task = sub.add_parser(
-        "task", help="add/complete/remove tasks (today or --tomorrow)"
-    )
+    task = sub.add_parser("task", help="add/complete/remove dated Today tasks")
     actions = task.add_subparsers(dest="action", required=True)
-
-    add = actions.add_parser("add", help="add a task to Today (or --tomorrow)")
+    add = actions.add_parser("add", help="add a task to the selected date")
     add.add_argument("text", help="the task text")
-    add.add_argument(
-        "--tomorrow", action="store_true", help="add to the Tomorrow list instead"
-    )
-    add.add_argument(
-        "--json", action="store_true", help="print the updated list as JSON"
-    )
+    add.add_argument("--json", action="store_true")
     add.set_defaults(func=_cmd_task)
-
-    done = actions.add_parser("done", help="toggle a Today task's checkbox by index")
-    done.add_argument("index", type=int, help="1-based task index (from `show --json`)")
-    done.add_argument(
-        "--json", action="store_true", help="print the updated list as JSON"
-    )
+    done = actions.add_parser("done", help="toggle a task checkbox by index")
+    done.add_argument("index", type=int)
+    done.add_argument("--json", action="store_true")
     done.set_defaults(func=_cmd_task)
-
-    rm = actions.add_parser("rm", help="remove a task from Today (or --tomorrow)")
-    rm.add_argument("index", type=int, help="1-based task index (from `show --json`)")
-    rm.add_argument(
-        "--tomorrow", action="store_true", help="remove from the Tomorrow list instead"
-    )
-    rm.add_argument(
-        "--json", action="store_true", help="print the updated list as JSON"
-    )
-    rm.set_defaults(func=_cmd_task)
+    remove = actions.add_parser("rm", help="remove a task by index")
+    remove.add_argument("index", type=int)
+    remove.add_argument("--json", action="store_true")
+    remove.set_defaults(func=_cmd_task)
 
 
 def _add_habit_parser(sub: argparse._SubParsersAction) -> None:
-    """`today habit {toggle,list}` - flip a habit's checkbox or list habits."""
     habit = sub.add_parser("habit", help="toggle/list habits")
     actions = habit.add_subparsers(dest="haction", required=True)
-
-    toggle = actions.add_parser("toggle", help="check/uncheck a habit by name")
-    toggle.add_argument("name", help="habit name (a leading emoji is optional)")
-    toggle.add_argument(
-        "--json", action="store_true", help="print the updated habits as JSON"
-    )
+    toggle = actions.add_parser("toggle", help="toggle a habit by name")
+    toggle.add_argument("name")
+    toggle.add_argument("--json", action="store_true")
     toggle.set_defaults(func=_cmd_habit)
-
-    lst = actions.add_parser("list", help="list habits and their done state")
-    lst.add_argument("--json", action="store_true", help="print habits as JSON")
-    lst.set_defaults(func=_cmd_habit)
+    listing = actions.add_parser("list", help="list habits")
+    listing.add_argument("--json", action="store_true")
+    listing.set_defaults(func=_cmd_habit)
 
 
 def _add_weight_parser(sub: argparse._SubParsersAction) -> None:
-    """`today weight [<value>]` - log the day's weight, or show the trend."""
     weight = sub.add_parser("weight", help="log or show weight")
-    weight.add_argument(
-        "value", nargs="?", help="weight to log (e.g. 75 or 75Kg); omit to show trend"
-    )
-    weight.add_argument(
-        "--days",
-        type=int,
-        default=7,
-        help="how many days back to include when showing the trend (default: 7)",
-    )
-    weight.add_argument("--json", action="store_true", help="machine-readable output")
+    weight.add_argument("value", nargs="?")
+    weight.add_argument("--days", type=int, default=7)
+    weight.add_argument("--json", action="store_true")
     weight.set_defaults(func=_cmd_weight)
 
 
 def _add_macros_parser(sub: argparse._SubParsersAction) -> None:
-    """`today macros [add <row>]` - append a macros row, or show the aggregate.
-
-    ``--json`` uses ``SUPPRESS`` defaults on both the parent and the ``add``
-    subparser so the subparser's default never clobbers a ``--json`` given
-    before the subcommand (and vice versa); the handler reads it via getattr.
-    """
-    macros = sub.add_parser("macros", help="add a macros row or show the aggregate")
-    macros.add_argument(
-        "--json",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="machine-readable output",
-    )
+    macros = sub.add_parser("macros", help="add/remove food or show macro totals")
+    macros.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     macros.set_defaults(func=_cmd_macros)
-
     actions = macros.add_subparsers(dest="maction")
     add = actions.add_parser("add", help="append a what,protein,carbs,fat row")
-    add.add_argument("row", help="CSV row: what,protein,carbs,fat")
-    add.add_argument(
-        "--json",
-        action="store_true",
-        default=argparse.SUPPRESS,
-        help="machine-readable output",
-    )
+    add.add_argument("row")
+    add.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     add.set_defaults(func=_cmd_macros)
+    remove = actions.add_parser("rm", help="remove a valid food row by index")
+    remove.add_argument("index", type=int)
+    remove.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    remove.set_defaults(func=_cmd_macros)
 
 
 def _add_note_parser(sub: argparse._SubParsersAction) -> None:
-    """`today note {add,list}` - append a note, or list/search notes by tag."""
-    note = sub.add_parser("note", help="add/list notes (with tags)")
+    note = sub.add_parser("note", help="add/list notes")
     actions = note.add_subparsers(dest="naction", required=True)
-
-    add = actions.add_parser("add", help="append a note to the Notes section")
-    add.add_argument("text", help="the note text")
-    add.add_argument("--tag", help="attach a note :: <tag> marker (a single word)")
-    add.add_argument("--json", action="store_true", help="print the notes as JSON")
+    add = actions.add_parser("add", help="append a note")
+    add.add_argument("text")
+    add.add_argument("--tag")
+    add.add_argument("--json", action="store_true")
     add.set_defaults(func=_cmd_note)
-
-    lst = actions.add_parser("list", help="list notes, or filter by --tag")
-    lst.add_argument("--tag", help="only notes carrying this note :: <tag>")
-    lst.add_argument("--json", action="store_true", help="print the notes as JSON")
-    lst.set_defaults(func=_cmd_note)
+    listing = actions.add_parser("list", help="list notes")
+    listing.add_argument("--tag")
+    listing.add_argument("--json", action="store_true")
+    listing.set_defaults(func=_cmd_note)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="today",
-        description="Open and update the-den journal. Bare `today` opens today's "
-        "entry in $EDITOR; subcommands are non-interactive.",
+        description="Open and update the-den journal. Subcommands are non-interactive.",
     )
-    # The release workflow greps this same version out of pyproject.toml and
-    # today/__init__.py before it publishes a tag.
     parser.add_argument("--version", action="version", version=f"today {__version__}")
     parser.add_argument(
         "--den", help="den directory (default: $DEN_PATH or ~/personal/the-den)"
     )
-    parser.add_argument("-N", "--offset", type=int, default=0, help="days from today")
-    parser.add_argument("--no-edit", action="store_true", help="do not open the editor")
+    dates = parser.add_mutually_exclusive_group()
+    dates.add_argument("--date", help="target date as YYYY-MM-DD")
+    dates.add_argument("-N", "--offset", type=int, help="days from today")
+    parser.add_argument("--no-edit", action="store_true")
     sub = parser.add_subparsers(dest="cmd")
 
-    p = sub.add_parser("path", help="print today's entry path (do not create)")
-    p.set_defaults(func=_cmd_path)
-
-    p = sub.add_parser(
-        "create", help="create the entry from the template, print its path"
-    )
-    p.set_defaults(func=_cmd_create)
-
-    p = sub.add_parser(
-        "show", help="read the day (habits/tasks/tomorrow/macros/weight)"
-    )
-    p.add_argument("--json", action="store_true", help="machine-readable output")
-    p.set_defaults(func=_cmd_show)
-
+    path = sub.add_parser("path", help="print the selected entry path")
+    path.set_defaults(func=_cmd_path)
+    create = sub.add_parser("create", help="create the selected entry")
+    create.set_defaults(func=_cmd_create)
+    show = sub.add_parser("show", help="read the selected day")
+    show.add_argument("--json", action="store_true")
+    show.set_defaults(func=_cmd_show)
     _add_task_parser(sub)
     _add_habit_parser(sub)
     _add_weight_parser(sub)
     _add_macros_parser(sub)
     _add_note_parser(sub)
-
+    upcoming = sub.add_parser("upcoming", help="list incomplete future tasks")
+    upcoming.add_argument("--json", action="store_true")
+    upcoming.set_defaults(func=_cmd_upcoming)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.cmd is None:
-        return _cmd_edit(args)
-    return int(args.func(args))
+    try:
+        if args.cmd is None:
+            return _cmd_edit(args)
+        return int(args.func(args))
+    except ValueError as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

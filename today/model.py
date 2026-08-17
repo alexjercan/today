@@ -58,6 +58,24 @@ class TomorrowTask:
 
 
 @dataclass
+class Food:
+    index: int
+    name: str
+    protein: float
+    carbs: float
+    fat: float
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "index": self.index,
+            "name": self.name,
+            "protein": self.protein,
+            "carbs": self.carbs,
+            "fat": self.fat,
+        }
+
+
+@dataclass
 class Macros:
     protein: float = 0.0
     carbs: float = 0.0
@@ -81,6 +99,7 @@ class Day:
     habits: list[Habit] = field(default_factory=list)
     tasks: list[Task] = field(default_factory=list)
     tomorrow: list[TomorrowTask] = field(default_factory=list)
+    foods: list[Food] = field(default_factory=list)
     macros: Macros = field(default_factory=Macros)
     weight: float | None = None
 
@@ -117,34 +136,46 @@ def _parse_habits(lines: list[str]) -> list[Habit]:
     return habits
 
 
-def _parse_macros(lines: list[str]) -> Macros:
+def _parse_food_row(line: str) -> tuple[str, float, float, float] | None:
+    row = line.strip()
+    if not row or row.startswith("what,"):
+        return None
+    cells = [cell.strip() for cell in row.split(",")]
+    if len(cells) < 4:
+        return None
+    try:
+        values = [float(cells[1]), float(cells[2]), float(cells[3])]
+    except ValueError:
+        return None
+    if not all(math.isfinite(value) for value in values):
+        return None
+    return cells[0], values[0], values[1], values[2]
+
+
+def _parse_macros(lines: list[str]) -> tuple[list[Food], Macros]:
+    foods: list[Food] = []
     protein = carbs = fat = 0.0
     for line in lines:
-        row = line.strip()
-        if not row or row.startswith("what,"):  # skip the CSV header
+        parsed = _parse_food_row(line)
+        if parsed is None:
             continue
-        cells = [c.strip() for c in row.split(",")]
-        if len(cells) < 4:
-            continue
-        try:
-            values = [float(cells[1]), float(cells[2]), float(cells[3])]
-        except ValueError:
-            continue
-        # Skip non-finite cells too: inf/nan would make the calorie round()
-        # below throw, so the reader must never let them into the sums (a
-        # hand-edited file could carry them). The writer rejects them upstream.
-        if not all(math.isfinite(v) for v in values):
-            continue
-        protein += values[0]
-        carbs += values[1]
-        fat += values[2]
-    # Atwater factors: protein/carbs 4 kcal/g, fat 9 kcal/g. Guard the total
-    # against a non-finite result: finite cells can still sum past DBL_MAX to
-    # inf (absurd hand-edited values), and round(inf) throws - the reader must
-    # never crash on file contents.
+        name, row_protein, row_carbs, row_fat = parsed
+        foods.append(
+            Food(
+                index=len(foods) + 1,
+                name=name,
+                protein=row_protein,
+                carbs=row_carbs,
+                fat=row_fat,
+            )
+        )
+        protein += row_protein
+        carbs += row_carbs
+        fat += row_fat
+    # Finite cells can still sum past DBL_MAX. Keep hand-edited data readable.
     total = protein * 4 + carbs * 4 + fat * 9
     calories = round(total) if math.isfinite(total) else 0
-    return Macros(protein=protein, carbs=carbs, fat=fat, calories=calories)
+    return foods, Macros(protein=protein, carbs=carbs, fat=fat, calories=calories)
 
 
 def _collect_list(
@@ -201,7 +232,7 @@ def parse_day(path: Path) -> Day:
             sections[current].append(line)
 
     habits = _parse_habits(sections.get(_HABITS, []))
-    macros = _parse_macros(sections.get(_MACROS, []))
+    foods, macros = _parse_macros(sections.get(_MACROS, []))
 
     # Tasks ("Today") and Tomorrow lists live inside the Notes section as bullet
     # lists under a "Today"/"Tomorrow" marker line.
@@ -237,6 +268,7 @@ def parse_day(path: Path) -> Day:
         habits=habits,
         tasks=tasks,
         tomorrow=tomorrow,
+        foods=foods,
         macros=macros,
         weight=weight,
     )

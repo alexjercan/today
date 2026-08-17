@@ -213,6 +213,25 @@ def test_add_macros_row_appends_after_existing_rows() -> None:
     assert "eggs,12,1,10\nrice,3,40,1\n" in out
 
 
+def test_remove_macros_row_uses_valid_row_index() -> None:
+    text = (
+        "# D\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\n"
+        "eggs,12,1,10\nhand edited prose\nrice,3,40,1\n\n### 📝 Notes\n\n"
+    )
+    out = edit.remove_macros_row(text, 2)
+    assert "rice,3,40,1" not in out
+    assert "eggs,12,1,10\nhand edited prose\n" in out
+
+
+def test_remove_macros_row_out_of_range_raises() -> None:
+    text = "# D\n\n### 🍽️ Macros\n\nwhat,protein,carbs,fat\neggs,12,1,10\n"
+    try:
+        edit.remove_macros_row(text, 2)
+    except IndexError:
+        return
+    raise AssertionError("expected IndexError")
+
+
 def test_add_macros_row_preserves_crlf() -> None:
     text = (
         "# D\r\n\r\n### 🍽️ Macros\r\n\r\nwhat,protein,carbs,fat\r\n\r\n### 📝 Notes\r\n"

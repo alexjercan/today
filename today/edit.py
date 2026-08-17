@@ -20,7 +20,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from today.model import _BULLET, _CHECK, _H1, _H3, _section_of
+from today.model import _BULLET, _CHECK, _H1, _H3, _parse_food_row, _section_of
 
 TODAY = "Today"
 TOMORROW = "Tomorrow"
@@ -334,6 +334,24 @@ def set_weight(text: str, value: str) -> str:
             return _join(lines)
     _append_notes_block(lines, [weight_line + newline])
     return _join(lines)
+
+
+def remove_macros_row(text: str, index: int) -> str:
+    """Remove a valid food row by its 1-based displayed index."""
+    lines = text.splitlines(keepends=True)
+    region = _section_region(lines, "macros")
+    if region is None:
+        raise LookupError("no Macros section")
+    start, end = region
+    valid_index = 0
+    for line_index in range(start, end):
+        if _parse_food_row(lines[line_index]) is None:
+            continue
+        valid_index += 1
+        if valid_index == index:
+            del lines[line_index]
+            return _join(lines)
+    raise IndexError(f"no food row #{index}")
 
 
 def add_macros_row(text: str, row: str) -> str:

@@ -15,10 +15,13 @@ today                       # open/create today's entry in $EDITOR
 today path                  # print today's entry path (no create)
 today create                # create from the template, print the path
 today show [--json]         # read the day: habits/tasks/tomorrow/macros/weight
-today -N -1 show            # operate on another day (offset in days)
+today -N -1 show            # select a day by offset
+today --date 2026-08-20 show # select an exact date
+today upcoming [--json]     # incomplete tasks in future daily files
 today --version             # print the declared version
 
-today task add "go to gym"  # add a task; task done/rm; --tomorrow variant
+today task add "go to gym"  # add a task; task done/rm
+today --date 2026-08-20 task add "prepare release"
 today habit toggle Gym
 today weight 80
 today macros add "eggs,12,1,10"
@@ -26,6 +29,9 @@ today note add "idea..." --tag ideas
 ```
 
 - Den path: `--den PATH`, else `$DEN_PATH`, else `~/personal/the-den`.
+- `--date YYYY-MM-DD` and `-N/--offset` are mutually exclusive.
+- Scheduled tasks live in the target date's `Today` list. New `Tomorrow` writes
+  and automatic carry-forward are not supported.
 
 ## Agent skill
 
