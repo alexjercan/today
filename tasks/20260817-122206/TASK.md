@@ -1,8 +1,8 @@
 # Build writable dashboardd Today widgets
 
-- STATUS: OPEN
+- STATUS: CLOSED
 - PRIORITY: 100
-- TAGS: dashboardd,widget,nix,python,frontend
+- TAGS: dashboardd, widget, nix, python, frontend
 
 ## Goal
 
@@ -490,7 +490,10 @@ Review artifacts:
 - `artifacts/today-upcoming-focus.png`
 - `artifacts/today-weight-focus.png`
 
-## Pending review
+## Approval and integration
 
-User visual and mobile interaction review is the remaining stop. nix.dotfiles
-integration and task close-out remain after approval.
+User approved the desktop and phone visuals and interactions. nix.dotfiles
+commit `398642f` now installs dashboardd and Today's independent widget package,
+composes both widget roots, and runs dashboardd as an enabled Home Manager user
+service on `127.0.0.1:7331`. Runtime verification discovered Today and all five
+variants from the packaged catalog.
