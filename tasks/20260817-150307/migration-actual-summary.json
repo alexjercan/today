@@ -1,0 +1,12 @@
+{
+  "files": 1134,
+  "first_pass_changed": 1134,
+  "errors": 0,
+  "final_idempotence_changes": 0,
+  "strict_parser_reads": 1134,
+  "missing_source_content_lines": 0,
+  "tasks_preserved": 676,
+  "weights_preserved": 681,
+  "backup_commit": "0b794d0",
+  "migration_commit": "2bc80b9"
+}

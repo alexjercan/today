@@ -16,7 +16,7 @@ from typing import Any, TextIO
 from today import application
 
 WIDGET_ID = "today"
-VARIANTS = {"tasks", "habits", "macros", "weight", "upcoming"}
+VARIANTS = {"tasks", "habits", "macros", "weight", "upcoming", "notes"}
 
 
 class CommandError(ValueError):
@@ -105,6 +105,7 @@ class Backend:
                 "tasks": [task.to_dict() for task in day.tasks],
                 "habits": [habit.to_dict() for habit in day.habits],
                 "foods": [food.to_dict() for food in day.foods],
+                "notes": [note.to_dict() for note in day.notes],
                 "macros": day.macros.to_dict(),
                 "weight": day.weight,
             },
@@ -252,6 +253,30 @@ class Backend:
         elif action == "weight.set":
             application.set_weight(
                 self.den, target, self.required_string(data, "value"), revision
+            )
+        elif action == "note.add":
+            title = data.get("title")
+            if title is not None and not isinstance(title, str):
+                raise CommandError("Title must be a string or null")
+            application.add_note(
+                self.den,
+                target,
+                self.required_string(data, "body"),
+                title,
+                revision,
+            )
+        elif action == "note.edit":
+            application.edit_structured_note(
+                self.den,
+                target,
+                self.required_index(data),
+                self.required_string(data, "heading"),
+                self.required_string(data, "body"),
+                revision,
+            )
+        elif action == "note.remove":
+            application.remove_note(
+                self.den, target, self.required_index(data), revision
             )
         else:
             raise CommandError(f"Unsupported action: {action}")

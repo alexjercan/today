@@ -5,14 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 from datetime import date, timedelta
 from pathlib import Path
 
 from today import __version__, application
-from today.model import Day, Habit, Task
+from today.model import Day, Habit, Note, Task
 
 DEFAULT_DEN = application.DEFAULT_DEN
 DEFAULT_EDITOR = "nvim"
@@ -71,7 +70,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         print(day.title)
         print(
             f"habits: {len(day.habits)}  tasks: {len(day.tasks)}  "
-            f"tomorrow: {len(day.tomorrow)}  weight: {day.weight}"
+            f"notes: {len(day.notes)}  weight: {day.weight}"
         )
     return 0
 
@@ -135,7 +134,7 @@ def _cmd_habit(args: argparse.Namespace) -> int:
     if args.haction == "toggle":
         try:
             day, _revision = application.toggle_habit(den, target, args.name, current)
-        except KeyError:
+        except LookupError:
             print(f"habit: no habit matching {args.name!r}", file=sys.stderr)
             return 1
         except application.RevisionConflict as exc:
@@ -223,52 +222,40 @@ def _cmd_macros(args: argparse.Namespace) -> int:
     return 0
 
 
-def _print_notes(notes: list[tuple[str, str | None]]) -> None:
+def _print_notes(notes: list[Note]) -> None:
     if not notes:
         print("(no notes)")
         return
-    for text, tag in notes:
-        print(f"[{tag}] {text}" if tag else text)
+    for note in notes:
+        print(f"{note.index}. {note.heading}")
+        if note.body:
+            print(note.body)
 
 
 def _cmd_note(args: argparse.Namespace) -> int:
     den = resolve_den(args.den)
     target = _target(args)
-    _day, current = application.read_day(den, target)
-    if args.naction == "add":
-        if not args.text.strip():
-            print("note: note text must not be empty", file=sys.stderr)
-            return 1
-        tag = None
-        if args.tag is not None:
-            if len(args.tag.split()) != 1:
-                print("note: tag must be a single word", file=sys.stderr)
-                return 1
-            tag = args.tag.strip()
-            if re.search(r"note\s*::", args.text, re.IGNORECASE):
-                print(
-                    "note: text may not contain a 'note ::' marker with --tag",
-                    file=sys.stderr,
-                )
-                return 1
-        try:
-            notes, _revision = application.add_note(
-                den, target, args.text, tag, current
+    day, current = application.read_day(den, target)
+    try:
+        if args.naction == "add":
+            day, _revision = application.add_note(
+                den, target, args.body, args.title, current
             )
-        except application.RevisionConflict as exc:
-            print(f"note: {exc}", file=sys.stderr)
-            return 1
-    else:
-        notes = application.list_notes(den, target)
-    if args.naction == "list" and args.tag is not None:
-        notes = [(text, tag) for text, tag in notes if tag == args.tag.strip()]
+        elif args.naction == "edit":
+            if args.index < 1 or args.index > len(day.notes):
+                raise IndexError(f"note {args.index} not found")
+            heading = args.heading or day.notes[args.index - 1].heading
+            day, _revision = application.edit_structured_note(
+                den, target, args.index, heading, args.body, current
+            )
+        elif args.naction == "rm":
+            day, _revision = application.remove_note(den, target, args.index, current)
+    except (IndexError, ValueError, LookupError, application.RevisionConflict) as exc:
+        print(f"note: {exc}", file=sys.stderr)
+        return 1
+    notes = day.notes
     if args.json:
-        print(
-            json.dumps(
-                [{"text": text, "tag": tag} for text, tag in notes],
-                ensure_ascii=False,
-            )
-        )
+        print(json.dumps([note.to_dict() for note in notes], ensure_ascii=False))
     else:
         _print_notes(notes)
     return 0
@@ -339,17 +326,26 @@ def _add_macros_parser(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_note_parser(sub: argparse._SubParsersAction) -> None:
-    note = sub.add_parser("note", help="add/list notes")
+    note = sub.add_parser("note", help="add/list/edit/remove structured notes")
     actions = note.add_subparsers(dest="naction", required=True)
-    add = actions.add_parser("add", help="append a note")
-    add.add_argument("text")
-    add.add_argument("--tag")
+    add = actions.add_parser("add", help="append a structured note")
+    add.add_argument("body")
+    add.add_argument("--title")
     add.add_argument("--json", action="store_true")
     add.set_defaults(func=_cmd_note)
-    listing = actions.add_parser("list", help="list notes")
-    listing.add_argument("--tag")
+    listing = actions.add_parser("list", help="list structured notes")
     listing.add_argument("--json", action="store_true")
     listing.set_defaults(func=_cmd_note)
+    change = actions.add_parser("edit", help="replace a note heading and body")
+    change.add_argument("index", type=int)
+    change.add_argument("body")
+    change.add_argument("--heading")
+    change.add_argument("--json", action="store_true")
+    change.set_defaults(func=_cmd_note)
+    remove = actions.add_parser("rm", help="remove a structured note")
+    remove.add_argument("index", type=int)
+    remove.add_argument("--json", action="store_true")
+    remove.set_defaults(func=_cmd_note)
 
 
 def build_parser() -> argparse.ArgumentParser:

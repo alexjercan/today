@@ -26,8 +26,8 @@ def _den(tmp_path: Path) -> Path:
     (den / "Daily").mkdir(parents=True)
     (den / "Templates").mkdir(parents=True)
     (den / "Templates" / "daily.md").write_text(
-        "# {{title}}\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n- [ ] 💪 Gym\n\n"
-        "### 🍽️ Macros\n\nwhat,protein,carbs,fat\n\n### 📝 Notes\n\n",
+        "# {{title}}\n\n### Tasks\n\n### Habits\n\n- [ ] 📕 Learn\n- [ ] 💪 Gym\n\n"
+        "### Macros\n\nwhat,protein,carbs,fat\n\n### Weight\n\n### Notes\n\n",
         encoding="utf-8",
     )
     return den
@@ -81,7 +81,7 @@ def test_title_pads_day_of_month_to_two_digits() -> None:
 def test_create_does_not_carry_tomorrow_forward(tmp_path: Path) -> None:
     den = _den(tmp_path)
     entry_path(den, -1).write_text(
-        "# yesterday\n\n### 📝 Notes\n\nTomorrow\n- ship the thing\n",
+        "# yesterday\n\n### Notes\n\nTomorrow\n- ship the thing\n",
         encoding="utf-8",
     )
     main(["--den", str(den), "create"])
@@ -117,98 +117,53 @@ def test_date_and_offset_are_mutually_exclusive() -> None:
     assert exc.value.code == 2
 
 
-def test_note_add_then_list_roundtrips(tmp_path: Path, capsys) -> None:
+def test_note_add_list_edit_and_remove(tmp_path: Path, capsys) -> None:
     den = _den(tmp_path)
-    main(["--den", str(den), "note", "add", "buy milk"])
-    capsys.readouterr()
-    rc = main(["--den", str(den), "note", "list", "--json"])
-    assert rc == 0
-    out = json.loads(capsys.readouterr().out)
-    assert out == [{"text": "buy milk", "tag": None}]
-
-
-def test_note_add_with_tag_and_filter(tmp_path: Path, capsys) -> None:
-    den = _den(tmp_path)
-    main(["--den", str(den), "note", "add", "ship release", "--tag", "work"])
-    main(["--den", str(den), "note", "add", "call mom", "--tag", "home"])
-    main(["--den", str(den), "note", "add", "untagged thing"])
-    capsys.readouterr()
-    # Filter by tag.
-    rc = main(["--den", str(den), "note", "list", "--tag", "work", "--json"])
-    assert rc == 0
-    assert json.loads(capsys.readouterr().out) == [
-        {"text": "ship release", "tag": "work"}
-    ]
-    # Listing all yields every note, tag split out.
-    main(["--den", str(den), "note", "list", "--json"])
-    allnotes = json.loads(capsys.readouterr().out)
-    assert allnotes == [
-        {"text": "ship release", "tag": "work"},
-        {"text": "call mom", "tag": "home"},
-        {"text": "untagged thing", "tag": None},
-    ]
-
-
-def test_note_list_does_not_include_tasks_or_weight(tmp_path: Path, capsys) -> None:
-    """Notes listing must ignore the Today/Tomorrow lists and the weight line."""
-    den = _den(tmp_path)
-    main(["--den", str(den), "task", "add", "a today task"])
-    entry_path(den, 0).write_text(
-        entry_path(den, 0).read_text() + "\nTomorrow\n- a historical tomorrow task\n",
-        encoding="utf-8",
+    assert (
+        main(
+            ["--den", str(den), "note", "add", "buy milk", "--title", "home", "--json"]
+        )
+        == 0
     )
-    main(["--den", str(den), "weight", "75"])
-    main(["--den", str(den), "note", "add", "the only note"])
-    capsys.readouterr()
-    main(["--den", str(den), "note", "list", "--json"])
-    out = json.loads(capsys.readouterr().out)
-    assert out == [{"text": "the only note", "tag": None}]
-
-
-def test_note_add_rejects_multiword_tag(tmp_path: Path, capsys) -> None:
-    den = _den(tmp_path)
-    main(["--den", str(den), "create"])
-    before = entry_path(den, 0).read_text()
-    capsys.readouterr()
-    rc = main(["--den", str(den), "note", "add", "x", "--tag", "two words"])
-    assert rc == 1
-    assert "single word" in capsys.readouterr().err
-    assert entry_path(den, 0).read_text() == before  # file untouched
-
-
-def test_note_add_rejects_marker_in_text_with_tag(tmp_path: Path, capsys) -> None:
-    """With --tag the appended marker must be unambiguous, so a text already
-    carrying a 'note ::' marker is rejected."""
-    den = _den(tmp_path)
-    main(["--den", str(den), "create"])
-    capsys.readouterr()
-    rc = main(
-        ["--den", str(den), "note", "add", "sneaky note :: home", "--tag", "work"]
+    added = json.loads(capsys.readouterr().out)
+    assert added[0]["heading"].endswith(" - home")
+    assert added[0]["body"] == "buy milk"
+    assert (
+        main(
+            [
+                "--den",
+                str(den),
+                "note",
+                "edit",
+                "1",
+                "buy oat milk",
+                "--heading",
+                "updated",
+                "--json",
+            ]
+        )
+        == 0
     )
-    assert rc == 1
+    changed = json.loads(capsys.readouterr().out)
+    assert changed == [{"index": 1, "heading": "updated", "body": "buy oat milk"}]
+    assert main(["--den", str(den), "note", "rm", "1", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == []
 
 
-def test_note_untagged_text_can_carry_inline_marker(tmp_path: Path, capsys) -> None:
-    """Without --tag a text carrying its own `note :: tag` is stored verbatim and
-    read back with that tag split out (the old daily -n convention)."""
-    den = _den(tmp_path)
-    main(["--den", str(den), "note", "add", "remember note :: home the address"])
-    capsys.readouterr()
-    main(["--den", str(den), "note", "list", "--tag", "home", "--json"])
-    assert json.loads(capsys.readouterr().out) == [
-        {"text": "remember the address", "tag": "home"}
-    ]
-
-
-def test_note_add_rejects_empty_text(tmp_path: Path, capsys) -> None:
+def test_note_list_ignores_unheaded_content(tmp_path: Path, capsys) -> None:
     den = _den(tmp_path)
     main(["--den", str(den), "create"])
-    before = entry_path(den, 0).read_text()
+    path = entry_path(den, 0)
+    path.write_text(path.read_text() + "legacy loose content\n", encoding="utf-8")
     capsys.readouterr()
-    rc = main(["--den", str(den), "note", "add", "   ", "--tag", "work"])
-    assert rc == 1
+    assert main(["--den", str(den), "note", "list", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == []
+
+
+def test_note_add_rejects_empty_body(tmp_path: Path, capsys) -> None:
+    den = _den(tmp_path)
+    assert main(["--den", str(den), "note", "add", "   "]) == 1
     assert "must not be empty" in capsys.readouterr().err
-    assert entry_path(den, 0).read_text() == before  # file untouched
 
 
 def test_note_list_empty_on_fresh_entry(tmp_path: Path, capsys) -> None:
@@ -328,7 +283,7 @@ def test_weight_log_writes_the_line_and_json(tmp_path: Path, capsys) -> None:
     out = json.loads(capsys.readouterr().out)
     assert out == {"date": stem_for(0), "weight": 75.0}
     text = entry_path(den, 0).read_text()
-    assert "weight :: 75.0 Kg" in text
+    assert "### Weight\n\n75.0 kg" in text
     # Round-trips through the parser.
     assert parse_day(entry_path(den, 0)).weight == 75.0
 
@@ -336,7 +291,7 @@ def test_weight_log_writes_the_line_and_json(tmp_path: Path, capsys) -> None:
 def test_weight_normalizes_unit_and_decimal(tmp_path: Path) -> None:
     den = _den(tmp_path)
     main(["--den", str(den), "weight", "80Kg"])
-    assert "weight :: 80.0 Kg" in entry_path(den, 0).read_text()
+    assert "### Weight\n\n80.0 kg" in entry_path(den, 0).read_text()
 
 
 def test_weight_updates_in_place(tmp_path: Path) -> None:
@@ -344,8 +299,8 @@ def test_weight_updates_in_place(tmp_path: Path) -> None:
     main(["--den", str(den), "weight", "75"])
     main(["--den", str(den), "weight", "74.5"])
     text = entry_path(den, 0).read_text()
-    assert text.count("weight ::") == 1  # updated, not duplicated
-    assert "weight :: 74.5 Kg" in text
+    assert text.count(" kg") == 1
+    assert "### Weight\n\n74.5 kg" in text
 
 
 def test_weight_rejects_non_numeric(tmp_path: Path, capsys) -> None:
@@ -454,8 +409,8 @@ def test_habit_toggle_preserves_the_rest_of_the_file(tmp_path: Path) -> None:
     den = _den(tmp_path)
     path = entry_path(den, 0)
     original = (
-        "# Monday\n\n### 🌱 Habits\n\n- [ ] 📕 Learn\n- [ ] 💪 Gym\n\n"
-        "### 🍽️ Macros\n\nwhat,protein,carbs,fat\n\n### 📝 Notes\n\n"
+        "# Monday\n\n### Habits\n\n- [ ] 📕 Learn\n- [ ] 💪 Gym\n\n"
+        "### Macros\n\nwhat,protein,carbs,fat\n\n### Notes\n\n"
         "Today\n- [ ] a task with [ ] brackets in it\n"
     )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -530,7 +485,7 @@ def test_task_rm_out_of_range_is_an_error(tmp_path: Path, capsys) -> None:
     capsys.readouterr()
     rc = main(["--den", str(den), "task", "rm", "9"])
     assert rc == 1
-    assert "task #9" in capsys.readouterr().err
+    assert "task 9" in capsys.readouterr().err
     # A rejected mutation leaves the file untouched.
     assert entry_path(den, 0).read_text() == before
 
@@ -539,9 +494,9 @@ def test_task_add_preserves_the_rest_of_the_file(tmp_path: Path) -> None:
     den = _den(tmp_path)
     path = entry_path(den, 0)
     original = (
-        "# Monday\n\n### 🌱 Habits\n\n- [x] 📕 Learn\n\n### 🍽️ Macros\n\n"
-        "what,protein,carbs,fat\n\n### 📝 Notes\n\nToday\n- [ ] existing\n\n"
-        "some freeform prose that must survive byte-for-byte\n"
+        "# Monday\n\n### Tasks\n\n- [ ] existing\n\n### Habits\n\n- [x] 📕 Learn\n\n### Macros\n\n"
+        "what,protein,carbs,fat\n\n### Weight\n\n### Notes\n\n"
+        "#### imported\n\nsome freeform prose that must survive byte-for-byte\n"
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(original, encoding="utf-8")

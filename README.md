@@ -14,7 +14,7 @@ agents call subcommands and never the editor.
 today                       # open/create today's entry in $EDITOR
 today path                  # print today's entry path (no create)
 today create                # create from the template, print the path
-today show [--json]         # read the day: habits/tasks/tomorrow/macros/weight
+today show [--json]         # read tasks, habits, macros, weight, and notes
 today -N -1 show            # select a day by offset
 today --date 2026-08-20 show # select an exact date
 today upcoming [--json]     # incomplete tasks in future daily files
@@ -25,13 +25,18 @@ today --date 2026-08-20 task add "prepare release"
 today habit toggle Gym
 today weight 80
 today macros add "eggs,12,1,10"
-today note add "idea..." --tag ideas
+today note add "idea..." --title project
+today note list --json      # structured #### notes
+today note edit 1 "replacement body"
+today note rm 1
 ```
 
 - Den path: `--den PATH`, else `$DEN_PATH`, else `~/personal/the-den`.
 - `--date YYYY-MM-DD` and `-N/--offset` are mutually exclusive.
-- Scheduled tasks live in the target date's `Today` list. New `Tomorrow` writes
-  and automatic carry-forward are not supported.
+- Scheduled tasks live directly in the target date's `### Tasks` section.
+- Daily files use plain Tasks, Habits, Macros, Weight, and Notes sections.
+- Notes are multi-line Markdown blocks delimited by `####` headings.
+- Missing sections read as empty domain defaults.
 
 ## dashboardd widgets
 

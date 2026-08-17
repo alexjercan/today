@@ -15,6 +15,7 @@ one line each. Breaking changes are tagged **(breaking)**.
 
 ### Changed
 
+- **(breaking)** Replace embedded Today, Tomorrow, weight, and loose-note syntax with canonical Tasks, Weight, and `####`-delimited Notes sections.
 - **(breaking)** Replace manual dashboard macro entry with fuzzy food selection and quantity calculation through the packaged `macros` CLI.
 - **(breaking)** Schedule future tasks in dated daily files through `--date`; remove new Tomorrow writes and carry-forward.
 

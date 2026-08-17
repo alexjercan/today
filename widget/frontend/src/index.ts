@@ -9,6 +9,7 @@ type Food = {
   carbs: number;
   fat: number;
 };
+type Note = { index: number; heading: string; body: string };
 type DatedTasks = { date: string; revision: string; tasks: Task[] };
 type FoodCandidate = { id: string; name: string; unit: "g" | "pc" };
 type FoodSearchResult = {
@@ -31,6 +32,7 @@ type Snapshot = {
     tasks: Task[];
     habits: Habit[];
     foods: Food[];
+    notes: Note[];
     macros: { protein: number; carbs: number; fat: number; calories: number };
     weight: number | null;
   };
@@ -62,8 +64,9 @@ h2 { margin:0; color:var(--dashboardd-color-text-bright); font-size:15px; line-h
 .row:last-child { border-bottom:0; }
 .row label { min-width:0; display:flex; align-items:center; gap:8px; cursor:pointer; }
 .row .text { min-width:0; overflow-wrap:anywhere; }
-input, button { min-height:32px; border:1px solid var(--dashboardd-color-border); border-radius:4px; background:var(--dashboardd-color-surface); color:var(--dashboardd-color-text); font:inherit; font-size:13px; }
-input { min-width:0; padding:5px 7px; }
+input, textarea, button { min-height:32px; border:1px solid var(--dashboardd-color-border); border-radius:4px; background:var(--dashboardd-color-surface); color:var(--dashboardd-color-text); font:inherit; font-size:13px; }
+input, textarea { min-width:0; padding:5px 7px; }
+textarea { resize:vertical; }
 button { padding:4px 9px; cursor:pointer; }
 button:hover:not(:disabled), button:focus-visible { border-color:var(--dashboardd-color-accent); color:var(--dashboardd-color-text-bright); }
 button:disabled, input:disabled { cursor:wait; opacity:.6; }
@@ -193,6 +196,7 @@ function parseSnapshot(value: unknown): Snapshot | null {
     !Array.isArray(today.tasks) ||
     !Array.isArray(today.habits) ||
     !Array.isArray(today.foods) ||
+    !Array.isArray(today.notes) ||
     !isMacros(today.macros) ||
     !(today.weight === null || isFiniteNumber(today.weight)) ||
     !isRecord(upcoming) ||
@@ -204,6 +208,7 @@ function parseSnapshot(value: unknown): Snapshot | null {
   const tasks = today.tasks.map(parseTask);
   const habits = today.habits.map(parseHabit);
   const foods = today.foods.map(parseFood);
+  const notes = today.notes.map(parseNote);
   const next = upcoming.next.map(parseDatedTask);
   const dates = upcoming.dates.map(parseDatedTasks);
   const history = value.weight_history.map(parseWeight);
@@ -211,6 +216,7 @@ function parseSnapshot(value: unknown): Snapshot | null {
     tasks.includes(null) ||
     habits.includes(null) ||
     foods.includes(null) ||
+    notes.includes(null) ||
     next.includes(null) ||
     dates.includes(null) ||
     history.includes(null)
@@ -227,6 +233,7 @@ function parseSnapshot(value: unknown): Snapshot | null {
       tasks: tasks as Task[],
       habits: habits as Habit[],
       foods: foods as Food[],
+      notes: notes as Note[],
       macros: today.macros,
       weight: today.weight as number | null,
     },
@@ -276,6 +283,18 @@ function parseFood(value: unknown): Food | null {
     carbs: value.carbs,
     fat: value.fat,
   };
+}
+
+function parseNote(value: unknown): Note | null {
+  if (
+    !isRecord(value) ||
+    !Number.isInteger(value.index) ||
+    (value.index as number) < 1 ||
+    typeof value.heading !== "string" ||
+    typeof value.body !== "string"
+  )
+    return null;
+  return { index: value.index as number, heading: value.heading, body: value.body };
 }
 
 function parseDatedTask(value: unknown): (Task & { date: string; revision: string }) | null {
@@ -1040,6 +1059,138 @@ function weightStyleElement(): HTMLStyleElement {
   return style;
 }
 
+const notesStyles = `${baseStyles}
+.notes { flex:1 1 auto; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+.note { padding:9px; border:1px solid color-mix(in srgb, var(--dashboardd-color-border) 45%, transparent); border-radius:5px; background:color-mix(in srgb, var(--dashboardd-color-surface) 88%, transparent); }
+.note h3 { margin:0 0 6px; color:var(--dashboardd-color-secondary); font-size:12px; font-weight:500; }
+.note pre { margin:0; color:var(--dashboardd-color-text); font:inherit; font-size:14px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+.note-actions { display:none; gap:6px; margin-top:8px; }
+.note-actions button { min-height:27px; padding-block:2px; }
+.note-form { display:grid; grid-template-columns:minmax(100px, .35fr) minmax(160px, 1fr) auto; }
+.note-edit { display:grid; gap:6px; }
+.note-edit textarea { min-height:150px; }
+.note-edit .buttons { display:flex; justify-content:flex-end; gap:6px; }
+:host([data-presentation=focus]) .note-actions { display:flex; }
+`;
+
+function mountNotes(container: HTMLElement, context: WidgetContext): WidgetFrontend {
+  const shadow = container.attachShadow({ mode: "open" });
+  const state = initialState();
+  let editing: Note | null = null;
+  const render = (): void => {
+    if (state.destroyed) return;
+    const article = document.createElement("article");
+    article.append(header("Notes", state.snapshot));
+    const notes = document.createElement("div");
+    notes.className = "notes";
+    const entries = state.snapshot?.today.notes ?? [];
+    if (entries.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = state.snapshot ? "No structured notes today" : "Loading notes...";
+      notes.append(empty);
+    }
+    for (const note of entries) {
+      const card = document.createElement("section");
+      card.className = "note";
+      if (editing?.index === note.index) {
+        card.append(noteEditor(context, state, editing, render, () => (editing = null)));
+      } else {
+        const heading = document.createElement("h3");
+        heading.textContent = note.heading;
+        const body = document.createElement("pre");
+        body.textContent = note.body;
+        const actions = document.createElement("div");
+        actions.className = "note-actions";
+        const change = document.createElement("button");
+        change.type = "button";
+        change.textContent = "Edit";
+        change.disabled = state.pending !== null;
+        change.addEventListener("click", () => { editing = { ...note }; render(); });
+        const remove = removeButton(`note ${note.heading}`, () => {
+          const today = state.snapshot?.today;
+          if (!today) return;
+          sendCommand(context, state, "note.remove", { date: today.date, revision: today.revision, index: note.index }, render);
+        });
+        remove.disabled = state.pending !== null;
+        actions.append(change, remove);
+        card.append(heading, body, actions);
+      }
+      notes.append(card);
+    }
+    article.append(notes, noteAddForm(context, state, render));
+    const style = document.createElement("style");
+    style.textContent = notesStyles;
+    shadow.replaceChildren(style, article);
+    setStatus(shadow, state);
+  };
+  render();
+  return {
+    update(payload: unknown): void {
+      const pending = state.pending;
+      if (applyUpdate(state, payload)) {
+        if (pending !== null && state.pending === null && state.error === null) editing = null;
+        render();
+      }
+    },
+    setPresentation(presentation: WidgetPresentation): void { shadow.host.setAttribute("data-presentation", presentation); },
+    destroy(): void { state.destroyed = true; shadow.replaceChildren(); },
+  };
+}
+
+function noteAddForm(context: WidgetContext, state: ViewState, render: () => void): HTMLFormElement {
+  const form = document.createElement("form");
+  form.className = "note-form";
+  const title = document.createElement("input");
+  title.placeholder = "Optional title";
+  title.setAttribute("aria-label", "Note title");
+  const body = document.createElement("input");
+  body.placeholder = "Add note";
+  body.setAttribute("aria-label", "Note body");
+  const add = document.createElement("button");
+  add.type = "submit";
+  add.textContent = "Add";
+  for (const control of [title, body, add]) control.disabled = state.pending !== null || state.snapshot === null;
+  form.append(title, body, add);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const today = state.snapshot?.today;
+    const noteBody = body.value.trim();
+    if (!today || !noteBody) return;
+    sendCommand(context, state, "note.add", { date: today.date, revision: today.revision, title: title.value.trim() || null, body: noteBody }, render);
+  });
+  return form;
+}
+
+function noteEditor(context: WidgetContext, state: ViewState, note: Note, render: () => void, cancel: () => void): HTMLElement {
+  const form = document.createElement("form");
+  form.className = "note-edit";
+  const heading = document.createElement("input");
+  heading.value = note.heading;
+  heading.setAttribute("aria-label", "Note heading");
+  const body = document.createElement("textarea");
+  body.value = note.body;
+  body.setAttribute("aria-label", "Note body");
+  const buttons = document.createElement("div");
+  buttons.className = "buttons";
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.textContent = "Cancel";
+  cancelButton.addEventListener("click", () => { cancel(); render(); });
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.textContent = "Save";
+  buttons.append(cancelButton, save);
+  form.append(heading, body, buttons);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const today = state.snapshot?.today;
+    if (!today || !heading.value.trim() || !body.value.trim()) return;
+    sendCommand(context, state, "note.edit", { date: today.date, revision: today.revision, index: note.index, heading: heading.value.trim(), body: body.value.trim() }, render);
+  });
+  return form;
+}
+
 const upcomingStyles = `${baseStyles}
 .normal { min-height:0; flex:1 1 auto; display:flex; flex-direction:column; gap:7px; }
 .normal .rows { flex:1 1 auto; }
@@ -1386,6 +1537,9 @@ export function mount(
       break;
     case "weight":
       frontend = mountWeight(container, context);
+      break;
+    case "notes":
+      frontend = mountNotes(container, context);
       break;
     case "upcoming":
       frontend = mountUpcoming(container, context);

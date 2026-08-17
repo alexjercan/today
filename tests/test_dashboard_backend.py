@@ -16,8 +16,8 @@ def _den(tmp_path: Path) -> Path:
     den = tmp_path / "den"
     (den / "Templates").mkdir(parents=True)
     (den / "Templates" / "daily.md").write_text(
-        "# {{title}}\n\n### 🌱 Habits\n\n- [ ] 💪 Gym\n\n"
-        "### 🍽️ Macros\n\nwhat,protein,carbs,fat\n\n### 📝 Notes\n\n",
+        "# {{title}}\n\n### Tasks\n\n### Habits\n\n- [ ] 💪 Gym\n\n"
+        "### Macros\n\nwhat,protein,carbs,fat\n\n### Weight\n\n### Notes\n\n",
         encoding="utf-8",
     )
     return den
@@ -203,6 +203,44 @@ def test_backend_searches_and_calculates_food(tmp_path: Path) -> None:
     assert added["today"]["foods"] == [
         {"index": 1, "name": "egg 2pc", "protein": 12.0, "carbs": 0.0, "fat": 10.0}
     ]
+    _shutdown(process)
+
+
+def test_backend_manages_structured_notes(tmp_path: Path) -> None:
+    process = _start(tmp_path)
+    payload = _initialize(process)
+    today = payload["today"]
+    revision = today["revision"]
+    commands: list[tuple[str, str, dict[str, Any]]] = [
+        (
+            "note-add",
+            "note.add",
+            {"title": "work", "body": "first\n\n- item"},
+        ),
+        (
+            "note-edit",
+            "note.edit",
+            {"index": 1, "heading": "updated", "body": "changed"},
+        ),
+        ("note-remove", "note.remove", {"index": 1}),
+    ]
+    for command_id, action, data in commands:
+        _send(
+            process,
+            "message",
+            {
+                "instance_id": "today-1",
+                "payload": {
+                    "command_id": command_id,
+                    "action": action,
+                    "data": {"date": today["date"], "revision": revision, **data},
+                },
+            },
+        )
+        result = _read(process)["data"]["payload"]
+        assert result["command_result"]["status"] == "succeeded"
+        revision = result["today"]["revision"]
+    assert result["today"]["notes"] == []
     _shutdown(process)
 
 

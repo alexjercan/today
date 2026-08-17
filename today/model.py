@@ -1,14 +1,4 @@
-"""The journal day model + a parser/serializer for the-den's markdown format.
-
-`the-den` stores one file per day under `Daily/YYYY-MM-DD-Weekday.md` with a fixed
-set of `### ` sections (Habits, Macros, Notes) plus, inside Notes, "Today" and
-"Tomorrow" task lists, and an optional `weight :: N Kg` line. `Day.to_dict()`
-mirrors the JSON the old `daily` script emitted, so the agent/tools get a stable,
-machine-readable shape.
-
-This CLI is the source of truth for the format; it reads existing entries and is
-the only writer (so nothing else has to parse the markdown).
-"""
+"""Strict parser for the canonical the-den daily Markdown format."""
 
 from __future__ import annotations
 
@@ -17,19 +7,15 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_H1 = re.compile(r"^#\s+(.*)$")
-_H3 = re.compile(r"^###\s+(.*)$")
-_CHECK = re.compile(r"^\s*-\s+\[( |x|X)\]\s+(.*)$")
-_BULLET = re.compile(r"^\s*-\s+(.*)$")
-_WEIGHT = re.compile(r"weight\s*::\s*([0-9]+(?:\.[0-9]+)?)\s*Kg", re.IGNORECASE)
-# Section headers are matched by the trailing word, not the emoji, so a changed
-# icon does not break parsing.
-_HABITS = "habits"
-_MACROS = "macros"
-_NOTES = "notes"
+_H1 = re.compile(r"^#\s+(.+?)\s*$")
+_H3 = re.compile(r"^###\s+(.+?)\s*$")
+_H4 = re.compile(r"^####\s+(.+?)\s*$")
+_CHECK = re.compile(r"^\s*-\s+\[([ xX])\]\s+(.+?)\s*$")
+_WEIGHT = re.compile(r"^([0-9]+(?:\.[0-9]+)?)\s+kg$", re.IGNORECASE)
+_SECTIONS = {"tasks", "habits", "macros", "weight", "notes"}
 
 
-@dataclass
+@dataclass(frozen=True)
 class Habit:
     name: str
     done: bool
@@ -38,7 +24,7 @@ class Habit:
         return {"name": self.name, "done": self.done}
 
 
-@dataclass
+@dataclass(frozen=True)
 class Task:
     index: int
     text: str
@@ -48,16 +34,7 @@ class Task:
         return {"index": self.index, "text": self.text, "done": self.done}
 
 
-@dataclass
-class TomorrowTask:
-    index: int
-    text: str
-
-    def to_dict(self) -> dict[str, object]:
-        return {"index": self.index, "text": self.text}
-
-
-@dataclass
+@dataclass(frozen=True)
 class Food:
     index: int
     name: str
@@ -75,7 +52,17 @@ class Food:
         }
 
 
-@dataclass
+@dataclass(frozen=True)
+class Note:
+    index: int
+    heading: str
+    body: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {"index": self.index, "heading": self.heading, "body": self.body}
+
+
+@dataclass(frozen=True)
 class Macros:
     protein: float = 0.0
     carbs: float = 0.0
@@ -93,13 +80,13 @@ class Macros:
 
 @dataclass
 class Day:
-    date: str  # "2026-07-20-Monday" (the filename stem)
+    date: str
     file: str
     title: str
     habits: list[Habit] = field(default_factory=list)
     tasks: list[Task] = field(default_factory=list)
-    tomorrow: list[TomorrowTask] = field(default_factory=list)
     foods: list[Food] = field(default_factory=list)
+    notes: list[Note] = field(default_factory=list)
     macros: Macros = field(default_factory=Macros)
     weight: float | None = None
 
@@ -108,32 +95,37 @@ class Day:
             "date": self.date,
             "file": self.file,
             "title": self.title,
-            "habits": [h.to_dict() for h in self.habits],
-            "tasks": [t.to_dict() for t in self.tasks],
-            "tomorrow": [t.to_dict() for t in self.tomorrow],
+            "habits": [habit.to_dict() for habit in self.habits],
+            "tasks": [task.to_dict() for task in self.tasks],
+            "notes": [note.to_dict() for note in self.notes],
             "macros": self.macros.to_dict(),
             "weight": self.weight,
         }
 
 
-def _section_of(header: str) -> str | None:
-    """Map a `### ...` header to a section key by its trailing word."""
-    words = header.strip().lower().split()
-    if not words:
-        return None
-    last = words[-1]
-    if last in (_HABITS, _MACROS, _NOTES):
-        return last
-    return None
-
-
-def _parse_habits(lines: list[str]) -> list[Habit]:
-    habits: list[Habit] = []
+def _sections(lines: list[str]) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
     for line in lines:
-        m = _CHECK.match(line)
-        if m:
-            habits.append(Habit(name=m.group(2).strip(), done=m.group(1) in "xX"))
-    return habits
+        match = _H3.match(line)
+        if match:
+            name = match.group(1).strip().lower()
+            current = name if name in _SECTIONS else None
+            if current is not None:
+                sections.setdefault(current, [])
+            continue
+        if current is not None:
+            sections[current].append(line)
+    return sections
+
+
+def _parse_checkboxes(lines: list[str]) -> list[tuple[str, bool]]:
+    result: list[tuple[str, bool]] = []
+    for line in lines:
+        match = _CHECK.match(line)
+        if match:
+            result.append((match.group(2).strip(), match.group(1) in "xX"))
+    return result
 
 
 def _parse_food_row(line: str) -> tuple[str, float, float, float] | None:
@@ -141,10 +133,10 @@ def _parse_food_row(line: str) -> tuple[str, float, float, float] | None:
     if not row or row.startswith("what,"):
         return None
     cells = [cell.strip() for cell in row.split(",")]
-    if len(cells) < 4:
+    if len(cells) != 4:
         return None
     try:
-        values = [float(cells[1]), float(cells[2]), float(cells[3])]
+        values = [float(cell) for cell in cells[1:]]
     except ValueError:
         return None
     if not all(math.isfinite(value) for value in values):
@@ -172,103 +164,67 @@ def _parse_macros(lines: list[str]) -> tuple[list[Food], Macros]:
         protein += row_protein
         carbs += row_carbs
         fat += row_fat
-    # Finite cells can still sum past DBL_MAX. Keep hand-edited data readable.
     total = protein * 4 + carbs * 4 + fat * 9
     calories = round(total) if math.isfinite(total) else 0
-    return foods, Macros(protein=protein, carbs=carbs, fat=fat, calories=calories)
+    return foods, Macros(protein, carbs, fat, calories)
 
 
-def _collect_list(
-    lines: list[str], start: int
-) -> tuple[list[tuple[str, bool | None]], int]:
-    """From `lines[start]` (a marker like 'Today'), collect the bullet list that
-    immediately follows. Returns [(text, done|None)] and the index after it.
+def _parse_weight(lines: list[str]) -> float | None:
+    values = [line.strip() for line in lines if line.strip()]
+    if len(values) != 1:
+        return None
+    match = _WEIGHT.fullmatch(values[0])
+    return float(match.group(1)) if match else None
 
-    ``done`` is True/False for a `- [ ]` checkbox, None for a plain `- ` bullet.
-    Stops at the first blank line or non-bullet line.
-    """
-    items: list[tuple[str, bool | None]] = []
-    i = start + 1
-    while i < len(lines):
-        line = lines[i]
-        if line.strip() == "":
-            break
-        check = _CHECK.match(line)
-        if check:
-            items.append((check.group(2).strip(), check.group(1) in "xX"))
-            i += 1
-            continue
-        bullet = _BULLET.match(line)
-        if bullet:
-            items.append((bullet.group(1).strip(), None))
-            i += 1
-            continue
-        break
-    return items, i
+
+def _parse_notes(lines: list[str]) -> list[Note]:
+    notes: list[Note] = []
+    heading: str | None = None
+    body: list[str] = []
+
+    def append() -> None:
+        if heading is None:
+            return
+        while body and not body[0].strip():
+            body.pop(0)
+        while body and not body[-1].strip():
+            body.pop()
+        notes.append(Note(len(notes) + 1, heading, "\n".join(body)))
+
+    for line in lines:
+        match = _H4.match(line)
+        if match:
+            append()
+            heading = match.group(1).strip()
+            body = []
+        elif heading is not None:
+            body.append(line)
+    append()
+    return notes
 
 
 def parse_day(path: Path) -> Day:
-    """Parse a Daily entry file into a `Day`."""
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
-
-    title = ""
-    sections: dict[str, list[str]] = {}
-    current: str | None = None
-    body_start = 0
-    for idx, line in enumerate(lines):
-        h1 = _H1.match(line)
-        if h1 and not title:
-            title = h1.group(1).strip()
-            body_start = idx + 1
-            continue
-        h3 = _H3.match(line)
-        if h3:
-            current = _section_of(h3.group(1))
-            if current is not None:
-                sections.setdefault(current, [])
-            continue
-        if current is not None:
-            sections[current].append(line)
-
-    habits = _parse_habits(sections.get(_HABITS, []))
-    foods, macros = _parse_macros(sections.get(_MACROS, []))
-
-    # Tasks ("Today") and Tomorrow lists live inside the Notes section as bullet
-    # lists under a "Today"/"Tomorrow" marker line.
-    notes_lines = lines[body_start:]
-    tasks: list[Task] = []
-    tomorrow: list[TomorrowTask] = []
-    i = 0
-    while i < len(notes_lines):
-        marker = notes_lines[i].strip().lower()
-        if marker == "today":
-            items, i = _collect_list(notes_lines, i)
-            tasks = [
-                Task(index=n + 1, text=t, done=bool(d))
-                for n, (t, d) in enumerate(items)
-                if d is not None
-            ]
-            continue
-        if marker == "tomorrow":
-            items, i = _collect_list(notes_lines, i)
-            tomorrow = [
-                TomorrowTask(index=n + 1, text=t) for n, (t, _) in enumerate(items)
-            ]
-            continue
-        i += 1
-
-    weight_match = _WEIGHT.search(text)
-    weight = float(weight_match.group(1)) if weight_match else None
-
+    title = next(
+        (match.group(1).strip() for line in lines if (match := _H1.match(line))),
+        "",
+    )
+    sections = _sections(lines)
+    task_values = _parse_checkboxes(sections.get("tasks", []))
+    habit_values = _parse_checkboxes(sections.get("habits", []))
+    foods, macros = _parse_macros(sections.get("macros", []))
     return Day(
         date=path.stem,
         file=str(path),
         title=title,
-        habits=habits,
-        tasks=tasks,
-        tomorrow=tomorrow,
+        tasks=[
+            Task(index + 1, text, done)
+            for index, (text, done) in enumerate(task_values)
+        ],
+        habits=[Habit(name, done) for name, done in habit_values],
         foods=foods,
+        notes=_parse_notes(sections.get("notes", [])),
         macros=macros,
-        weight=weight,
+        weight=_parse_weight(sections.get("weight", [])),
     )

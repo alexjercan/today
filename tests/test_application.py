@@ -17,8 +17,8 @@ def _den(tmp_path: Path) -> Path:
     den = tmp_path / "den"
     (den / "Templates").mkdir(parents=True)
     (den / "Templates" / "daily.md").write_text(
-        "# {{title}}\n\n### 🌱 Habits\n\n- [ ] 💪 Gym\n\n"
-        "### 🍽️ Macros\n\nwhat,protein,carbs,fat\n\n### 📝 Notes\n\n",
+        "# {{title}}\n\n### Tasks\n\n### Habits\n\n- [ ] 💪 Gym\n\n"
+        "### Macros\n\nwhat,protein,carbs,fat\n\n### Weight\n\n### Notes\n\n",
         encoding="utf-8",
     )
     return den
@@ -42,7 +42,7 @@ def test_ensure_day_does_not_carry_legacy_tomorrow(tmp_path: Path) -> None:
     previous = application.entry_path(den, date(2030, 5, 6))
     previous.parent.mkdir(parents=True)
     previous.write_text(
-        "# Monday\n\n### 📝 Notes\n\nTomorrow\n- old behavior\n",
+        "# Monday\n\n### Notes\n\nTomorrow\n- old behavior\n",
         encoding="utf-8",
     )
     target = application.ensure_day(den, TARGET)

@@ -173,7 +173,7 @@
           } ''
             bundle=${todayWidget}/share/dashboardd/widgets/today
             dashboardd-widget check "$bundle"
-            test "$(jq '.variants | length' "$bundle/widget.json")" -eq 5
+            test "$(jq '.variants | length' "$bundle/widget.json")" -eq 6
             test -x "$bundle/bin/today"
             grep -q ${macrosPackage}/bin/macros "$bundle/bin/today"
             touch "$out"
@@ -201,7 +201,7 @@
               exit 1
             fi
             curl --fail --silent http://127.0.0.1:17322/api/v1/widgets >catalog.json
-            test "$(jq '[.widgets[] | select(.id == "today")][0].variants | length' catalog.json)" -eq 5
+            test "$(jq '[.widgets[] | select(.id == "today")][0].variants | length' catalog.json)" -eq 6
             kill -INT "$pid"
             wait "$pid"
             trap - EXIT

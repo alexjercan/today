@@ -9,12 +9,12 @@ import re
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable, Iterator
 
 from today import edit
-from today.model import Day, Task, parse_day
+from today.model import Day, Note, Task, parse_day
 
 DEFAULT_DEN = Path.home() / "personal" / "the-den"
 _DATE_STEM = re.compile(r"^(\d{4}-\d{2}-\d{2})-[A-Za-z]+$")
@@ -92,8 +92,8 @@ def _template(den: Path) -> str:
     if template.is_file():
         return template.read_text(encoding="utf-8")
     return (
-        "# {{title}}\n\n### 🌱 Habits\n\n### 🍽️ Macros\n\n"
-        "what,protein,carbs,fat\n\n### 📝 Notes\n\n"
+        "# {{title}}\n\n### Tasks\n\n### Habits\n\n### Macros\n\n"
+        "what,protein,carbs,fat\n\n### Weight\n\n### Notes\n\n"
     )
 
 
@@ -143,7 +143,7 @@ def _ensure_day_locked(den: Path, target: date) -> tuple[Path, bool]:
 
 
 def ensure_day(den: Path, target: date) -> Path:
-    """Create a complete daily entry once, without Tomorrow carry-forward."""
+    """Create one complete canonical daily entry."""
     with _write_lock(den):
         path, _created = _ensure_day_locked(den, target)
         return path
@@ -207,7 +207,7 @@ def add_task(
         source = path.read_text(encoding="utf-8")
         if revision(path) != current:
             raise RevisionConflict(f"entry changed: {target.isoformat()}")
-        edit.atomic_write(path, edit.add_item(source, item, edit.TODAY))
+        edit.atomic_write(path, edit.add_task(source, item))
         return parse_day(path), revision(path)
 
 
@@ -215,7 +215,7 @@ def toggle_task(
     den: Path, target: date, index: int, expected_revision: str
 ) -> tuple[Day, str]:
     return _mutate_existing(
-        den, target, expected_revision, lambda text: edit.toggle_item(text, index)
+        den, target, expected_revision, lambda text: edit.toggle_task(text, index)
     )
 
 
@@ -226,7 +226,7 @@ def remove_task(
         den,
         target,
         expected_revision,
-        lambda text: edit.remove_item(text, index, edit.TODAY),
+        lambda text: edit.remove_task(text, index),
     )
 
 
@@ -297,26 +297,76 @@ def remove_food(
     )
 
 
+def _note_heading(title: str | None, now: datetime) -> str:
+    heading = now.strftime("%H:%M")
+    if title is None:
+        return heading
+    cleaned = title.strip()
+    if not cleaned or "\n" in cleaned or "\r" in cleaned:
+        raise ValueError("note title must be one non-empty line")
+    return f"{heading} - {cleaned}"
+
+
 def add_note(
     den: Path,
     target: date,
-    text: str,
-    tag: str | None,
+    body: str,
+    title: str | None,
     expected_revision: str,
-) -> tuple[list[tuple[str, str | None]], str]:
-    _day, current = _mutate_existing(
+    *,
+    now_fn: Callable[[], datetime] = datetime.now,
+) -> tuple[Day, str]:
+    cleaned = body.strip()
+    if not cleaned:
+        raise ValueError("note body must not be empty")
+    heading = _note_heading(title, now_fn())
+    return _mutate_existing(
         den,
         target,
         expected_revision,
-        lambda source: edit.add_note(source, text, tag),
+        lambda source: edit.add_note(source, heading, cleaned),
     )
-    path = entry_path(den, target)
-    return edit.iter_notes(path.read_text(encoding="utf-8")), current
 
 
-def list_notes(den: Path, target: date) -> list[tuple[str, str | None]]:
-    path = ensure_day(den, target)
-    return edit.iter_notes(path.read_text(encoding="utf-8"))
+def edit_structured_note(
+    den: Path,
+    target: date,
+    index: int,
+    heading: str,
+    body: str,
+    expected_revision: str,
+) -> tuple[Day, str]:
+    cleaned_heading = heading.strip()
+    cleaned_body = body.strip()
+    if not cleaned_heading or "\n" in cleaned_heading or "\r" in cleaned_heading:
+        raise ValueError("note heading must be one non-empty line")
+    if not cleaned_body:
+        raise ValueError("note body must not be empty")
+    return _mutate_existing(
+        den,
+        target,
+        expected_revision,
+        lambda source: edit.edit_note(source, index, cleaned_heading, cleaned_body),
+    )
+
+
+def remove_note(
+    den: Path,
+    target: date,
+    index: int,
+    expected_revision: str,
+) -> tuple[Day, str]:
+    return _mutate_existing(
+        den,
+        target,
+        expected_revision,
+        lambda source: edit.remove_note(source, index),
+    )
+
+
+def list_notes(den: Path, target: date) -> tuple[list[Note], str]:
+    day, current = read_day(den, target)
+    return day.notes, current
 
 
 def list_upcoming(den: Path, after: date) -> list[UpcomingTask]:

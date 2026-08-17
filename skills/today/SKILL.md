@@ -14,17 +14,19 @@ Read and edit the den with the `today` CLI. Never run bare `today`; it opens `$E
 today path
 today create
 today show --json
-today task add "<text>" [--tomorrow]
+today task add "<text>"
 today task done <index>
-today task rm <index> [--tomorrow]
+today task rm <index>
 today habit list
 today habit toggle "<name>"
 today weight [<number>]
 today weight --days <N> --json
 today macros
 today macros add "what,protein,carbs,fat"
-today note add "<text>" [--tag <word>]
-today note list [--tag <word>]
+today note add "<body>" [--title <title>]
+today note list --json
+today note edit <index> "<body>" [--heading <heading>]
+today note rm <index>
 today -N <offset> <subcommand>
 today --help
 ```

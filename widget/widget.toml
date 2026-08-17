@@ -1,7 +1,7 @@
 schema_version = 2
 id = "today"
 name = "Today"
-description = "Writable daily tasks, habits, nutrition, weight, and planning"
+description = "Writable daily tasks, habits, nutrition, weight, notes, and planning"
 backend = "dist/bin/today-dashboardd-widget"
 
 [[variants]]
@@ -33,6 +33,14 @@ id = "weight"
 name = "Weight"
 width = 1
 height = 1
+frontend = "frontend/dist/index.js"
+focus = true
+
+[[variants]]
+id = "notes"
+name = "Notes"
+width = 5
+height = 3
 frontend = "frontend/dist/index.js"
 focus = true
 
