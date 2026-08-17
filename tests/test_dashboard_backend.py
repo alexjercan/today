@@ -95,6 +95,20 @@ def test_backend_lifecycle_ping_and_write(tmp_path: Path) -> None:
         {
             "instance_id": "today-1",
             "payload": {
+                "command_id": "refresh-1",
+                "action": "refresh",
+                "data": {},
+            },
+        },
+    )
+    refresh = _read(process)["data"]["payload"]
+    assert refresh["command_result"]["status"] == "succeeded"
+    _send(
+        process,
+        "message",
+        {
+            "instance_id": "today-1",
+            "payload": {
                 "command_id": "add-1",
                 "action": "task.add",
                 "data": {

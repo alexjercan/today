@@ -191,6 +191,8 @@ class Backend:
         }
 
     def execute(self, action: str, data: dict[str, object]) -> None:
+        if action == "refresh":
+            return
         target = self.command_date(data)
         today = self.today_fn()
         if action.startswith("upcoming."):
@@ -223,8 +225,6 @@ class Backend:
             application.set_weight(
                 self.den, target, self.required_string(data, "value"), revision
             )
-        elif action == "refresh":
-            return
         else:
             raise CommandError(f"Unsupported action: {action}")
 
