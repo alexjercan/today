@@ -33,6 +33,29 @@ today note add "idea..." --tag ideas
 - Scheduled tasks live in the target date's `Today` list. New `Tomorrow` writes
   and automatic carry-forward are not supported.
 
+## dashboardd widgets
+
+The flake exports `packages.dashboardd-widget`, an external runtime bundle with
+five writable variants: Tasks, Habits, Macros, Weight, and Upcoming.
+
+```bash
+nix build .#dashboardd-widget
+dashboardd-widget check result/share/dashboardd/widgets/today
+```
+
+Compose it with dashboardd without merging package trees:
+
+```nix
+lib.makeSearchPath "share/dashboardd/widgets" [
+  inputs.dashboardd.packages.${pkgs.system}.bundled-widgets
+  inputs.today.packages.${pkgs.system}.dashboardd-widget
+]
+```
+
+The Python backend inherits `DEN_PATH`; otherwise it uses
+`~/personal/the-den`. Starting a Today widget ensures the current daily entry
+exists. Dated Upcoming writes create the selected future entry.
+
 ## Agent skill
 
 The flake exports `skills.today` for agent workspaces that support external

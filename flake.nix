@@ -24,6 +24,11 @@
     };
 
     flake-parts.url = "github:hercules-ci/flake-parts";
+
+    dashboardd = {
+      url = "github:alexjercan/dashboardd/e68a4acdd73b5be73883f4fa435db26a2f16cbab";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = inputs @ {
@@ -71,6 +76,45 @@
           package = pythonSet.today;
         };
 
+        dashboarddWidgetTool = inputs.dashboardd.packages.${system}.dashboardd-widget;
+        dashboarddPackage = inputs.dashboardd.packages.${system}.dashboardd;
+        frontendNodeModules = pkgs.importNpmLock.buildNodeModules {
+          npmRoot = ./widget/frontend;
+          nodejs = pkgs.nodejs_22;
+        };
+        widgetFrontend = pkgs.stdenvNoCC.mkDerivation {
+          pname = "today-widget-frontend";
+          version = "0.1.0";
+          src = ./widget/frontend;
+          nativeBuildInputs = [pkgs.nodejs_22];
+          buildPhase = ''
+            runHook preBuild
+            cp -R ${frontendNodeModules}/node_modules .
+            npm run build
+            runHook postBuild
+          '';
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out"
+            cp -R dist/. "$out/"
+            runHook postInstall
+          '';
+        };
+        todayWidget = pkgs.runCommand "today-dashboardd-widget-0.1.0" {
+          nativeBuildInputs = [dashboarddWidgetTool];
+          meta.description = "Writable Today widgets for dashboardd";
+        } ''
+          cp -R ${./widget} source
+          chmod -R u+w source
+          mkdir -p source/dist/bin source/frontend/dist
+          cp ${todayApp}/bin/today-dashboardd-widget source/dist/bin/
+          cp -R ${widgetFrontend}/. source/frontend/dist/
+          mkdir -p "$out/share/dashboardd/widgets"
+          dashboardd-widget pack source/widget.toml \
+            --output "$out/share/dashboardd/widgets/today"
+          dashboardd-widget check "$out/share/dashboardd/widgets/today"
+        '';
+
         # A check derivation: run one command against a writable source copy.
         mkCheck = name: command:
           pkgs.runCommand "today-${name}" {
@@ -94,6 +138,7 @@
           today = todayApp.overrideAttrs (old: {
             meta = (old.meta or {}) // {mainProgram = "today";};
           });
+          dashboardd-widget = todayWidget;
           default = todayApp.overrideAttrs (old: {
             meta = (old.meta or {}) // {mainProgram = "today";};
           });
@@ -112,6 +157,45 @@
           ruff = mkCheck "ruff" "ruff check .";
           mypy = mkCheck "mypy" "mypy .";
           pytest = mkCheck "pytest" "pytest";
+          widget-frontend = widgetFrontend;
+          widget-package = pkgs.runCommand "today-widget-package-check" {
+            nativeBuildInputs = [dashboarddWidgetTool pkgs.jq];
+          } ''
+            bundle=${todayWidget}/share/dashboardd/widgets/today
+            dashboardd-widget check "$bundle"
+            test "$(jq '.variants | length' "$bundle/widget.json")" -eq 5
+            test -x "$bundle/bin/today"
+            touch "$out"
+          '';
+          widget-catalog = pkgs.runCommand "today-widget-catalog-check" {
+            nativeBuildInputs = [dashboarddPackage pkgs.curl pkgs.jq];
+          } ''
+            export DASHBOARDD_WIDGET_PATH="${dashboarddPackage}/share/dashboardd/widgets:${todayWidget}/share/dashboardd/widgets"
+            export DASHBOARDD_PORT=17322
+            export DASHBOARDD_STATE_FILE="$TMPDIR/dashboard.json"
+            export DASHBOARDD_CONFIG_FILE="$TMPDIR/config.toml"
+            dashboardd >dashboardd.log 2>&1 &
+            pid=$!
+            trap 'kill "$pid" 2>/dev/null || true' EXIT
+            ready=0
+            for _ in $(seq 1 50); do
+              if curl --fail --silent http://127.0.0.1:17322/health >/dev/null; then
+                ready=1
+                break
+              fi
+              sleep 0.1
+            done
+            if [ "$ready" -ne 1 ]; then
+              cat dashboardd.log
+              exit 1
+            fi
+            curl --fail --silent http://127.0.0.1:17322/api/v1/widgets >catalog.json
+            test "$(jq '[.widgets[] | select(.id == "today")][0].variants | length' catalog.json)" -eq 5
+            kill -INT "$pid"
+            wait "$pid"
+            trap - EXIT
+            touch "$out"
+          '';
         };
 
         devShells.default = pkgs.mkShell {
