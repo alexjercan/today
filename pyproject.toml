@@ -12,6 +12,7 @@ dependencies = []
 
 [project.scripts]
 today = "today.cli:main"
+today-dashboardd-widget = "today.dashboard_backend:main"
 
 [build-system]
 requires = ["hatchling", "editables"]
