@@ -1,0 +1,45 @@
+schema_version = 2
+id = "today"
+name = "Today"
+description = "Writable daily tasks, habits, nutrition, weight, and planning"
+backend = "dist/bin/today-dashboardd-widget"
+
+[[variants]]
+id = "tasks"
+name = "Tasks"
+width = 3
+height = 3
+frontend = "frontend/dist/tasks.js"
+focus = true
+
+[[variants]]
+id = "habits"
+name = "Habits"
+width = 3
+height = 2
+frontend = "frontend/dist/habits.js"
+focus = false
+
+[[variants]]
+id = "macros"
+name = "Macros"
+width = 3
+height = 1
+frontend = "frontend/dist/macros.js"
+focus = true
+
+[[variants]]
+id = "weight"
+name = "Weight"
+width = 1
+height = 1
+frontend = "frontend/dist/weight.js"
+focus = true
+
+[[variants]]
+id = "upcoming"
+name = "Upcoming"
+width = 3
+height = 2
+frontend = "frontend/dist/upcoming.js"
+focus = true

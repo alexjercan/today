@@ -1,0 +1,13 @@
+{
+  "name": "@today/dashboardd-widget",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@dashboardd/widget-sdk": "https://github.com/alexjercan/dashboardd/releases/download/v0.1.0/dashboardd-widget-sdk-0.1.0.tgz",
+    "typescript": "5.9.3"
+  }
+}
