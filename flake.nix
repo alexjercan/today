@@ -174,6 +174,8 @@
             bundle=${todayWidget}/share/dashboardd/widgets/today
             dashboardd-widget check "$bundle"
             test "$(jq '.variants | length' "$bundle/widget.json")" -eq 6
+            test "$(jq '[.variants[] | select(.id == "notes")][0].width' "$bundle/widget.json")" -eq 3
+            test "$(jq '[.variants[] | select(.id == "notes")][0].height' "$bundle/widget.json")" -eq 5
             test -x "$bundle/bin/today"
             grep -q ${macrosPackage}/bin/macros "$bundle/bin/today"
             touch "$out"

@@ -39,8 +39,8 @@ focus = true
 [[variants]]
 id = "notes"
 name = "Notes"
-width = 5
-height = 3
+width = 3
+height = 5
 frontend = "frontend/dist/index.js"
 focus = true
 

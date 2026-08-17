@@ -4,7 +4,7 @@
 - PRIORITY: 100
 - TAGS: markdown,notes,dashboardd,migration
 
-Replace the legacy daily Markdown layout with independent Tasks, Habits, Macros, Weight, and Notes sections, then add a 5x3 structured Notes widget.
+Replace the legacy daily Markdown layout with independent Tasks, Habits, Macros, Weight, and Notes sections, then add a tall 3x5 structured Notes widget.
 
 ## Accepted format
 
@@ -28,7 +28,7 @@ Replace the legacy daily Markdown layout with independent Tasks, Habits, Macros,
 - New parser and all writers use only the canonical sections.
 - Tomorrow is removed from the model and JSON output.
 - Notes support list, add, edit, and remove with revisions.
-- Notes dashboard variant is 5x3 with normal append and Focus edit/remove.
+- Notes dashboard variant is a tall 3x5 with normal append and Focus edit/remove.
 - Migration preserves old source text semantically and validates task, weight, and food counts.
 - Template and all daily entries use the canonical structure.
 - Today, browser, migration, and Home Manager checks pass.
@@ -40,7 +40,7 @@ Replace the legacy daily Markdown layout with independent Tasks, Habits, Macros,
 - Removed Tomorrow from `Day` and JSON output.
 - Replaced embedded task and weight writes with section-scoped transforms.
 - Added structured note list/add/edit/remove operations and backend commands.
-- Added a 5x3 Notes widget with normal quick append and Focus editing/removal.
+- Added a tall 3x5 Notes widget with normal quick append and Focus editing/removal.
 - Added the task-local atomic migration script. It converts old task and weight
   structures, wraps ambiguous content in `#### Imported`, converts standalone
   old note markers to H4 titles, and preserves Tomorrow data under
@@ -73,9 +73,18 @@ Replace the legacy daily Markdown layout with independent Tasks, Habits, Macros,
 - Updated and applied the Home Manager activation package.
 - dashboardd is active and all five existing Today backends became ready
   against the migrated strict format.
-- Runtime catalog exposes six Today variants, including Notes at 5x3.
+- Runtime catalog exposes six Today variants, including Notes at 3x5.
 - Current real entry reports its migrated task, weight, and structured note
   values correctly.
 - Browser automation added a titled note in normal mode, edited its multi-line
   body in Focus, found no page errors, and found no phone horizontal overflow.
 - Review artifacts: `notes-widget.png`, `notes-focus.png`, and `notes-phone.png`.
+
+## Dimension correction
+
+- Initial implementation incorrectly used width 5 and height 3 despite the
+  explicit tall requirement.
+- Corrected Notes to width 3 and height 5.
+- Added package assertions for both dimensions.
+- Repeated desktop, Focus, and phone browser checks. The desktop widget's
+  measured height is greater than its width.
