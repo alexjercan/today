@@ -1,8 +1,8 @@
 # Use macros CLI for dashboard food entry
 
-- STATUS: IN_PROGRESS
+- STATUS: CLOSED
 - PRIORITY: 100
-- TAGS: dashboardd,macros,food,nix
+- TAGS: dashboardd, macros, food, nix
 
 Replace manual macro entry in the Today dashboard widget with macros.nvim food autocomplete and quantity-based calculation.
 
@@ -50,8 +50,11 @@ Replace manual macro entry in the Today dashboard widget with macros.nvim food a
   no frontend exceptions, and no phone horizontal overflow.
 - Evidence: `food-autocomplete.png` and `food-phone.png`.
 
-## Remaining
+## Home Manager deployment
 
-- Update the local macros and Today inputs in nix.dotfiles.
-- Build and apply the Home Manager activation package.
-- Verify the running user service against the real food database.
+nix.dotfiles commit `5727cb6` makes Today's macros input follow the local
+macros.nvim JSON CLI checkout and sets the service's database explicitly to
+`~/.local/share/nvim/macros.csv`. Its flake check and Home Manager activation
+build passed. The switch restarted the healthy service with all five Today
+instances. A read-only packaged backend search against the real database
+returned both chicken entries for `chick`.
