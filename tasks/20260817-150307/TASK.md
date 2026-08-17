@@ -67,3 +67,15 @@ Replace the legacy daily Markdown layout with independent Tasks, Habits, Macros,
 - Removed all old Today, standalone note, and weight markers. Ambiguous old
   headings in note bodies were demoted to H5 under imported note blocks so
   they remain content instead of becoming sections.
+
+## Runtime and browser evidence
+
+- Updated and applied the Home Manager activation package.
+- dashboardd is active and all five existing Today backends became ready
+  against the migrated strict format.
+- Runtime catalog exposes six Today variants, including Notes at 5x3.
+- Current real entry reports its migrated task, weight, and structured note
+  values correctly.
+- Browser automation added a titled note in normal mode, edited its multi-line
+  body in Focus, found no page errors, and found no phone horizontal overflow.
+- Review artifacts: `notes-widget.png`, `notes-focus.png`, and `notes-phone.png`.
