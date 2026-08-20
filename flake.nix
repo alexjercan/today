@@ -82,7 +82,7 @@
         };
 
         dashboarddWidgetTool = inputs.dashboardd.packages.${system}.dashboardd-widget-bundle;
-        dashboarddPackage = inputs.dashboardd.packages.${system}.dashboardd;
+        dashboarddServer = inputs.dashboardd.packages.${system}.dashboardd-unwrapped;
         macrosPackage = inputs.macros.packages.${system}.default;
         frontendNodeModules = pkgs.importNpmLock.buildNodeModules {
           npmRoot = ./widget/frontend;
@@ -181,9 +181,11 @@
             touch "$out"
           '';
           widget-catalog = pkgs.runCommand "today-widget-catalog-check" {
-            nativeBuildInputs = [dashboarddPackage pkgs.curl pkgs.jq];
+            nativeBuildInputs = [dashboarddServer pkgs.curl pkgs.jq];
           } ''
-            export DASHBOARDD_WIDGET_PATH="${dashboarddPackage}/share/dashboardd/widgets:${todayWidget}/share/dashboardd/widgets"
+            mkdir web
+            export DASHBOARDD_WEB_DIR="$PWD/web"
+            export DASHBOARDD_WIDGET_PATH="${todayWidget}/share/dashboardd/widgets"
             export DASHBOARDD_PORT=17322
             export DASHBOARDD_STATE_FILE="$TMPDIR/dashboard.json"
             export DASHBOARDD_CONFIG_FILE="$TMPDIR/config.toml"

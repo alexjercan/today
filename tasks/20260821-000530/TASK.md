@@ -1,6 +1,6 @@
 # Migrate the Today widget to dashboardd 0.2.0
 
-- STATUS: IN PROGRESS
+- STATUS: COMPLETE
 - TAGS: dashboardd, widget, release, nix
 
 ## Goal
@@ -28,3 +28,5 @@ GitHub exposes Today v0.3.1, and its Nix widget package builds with dashboardd v
 ## Verification
 
 - `nix flake check -L` passes. It covers Ruff, mypy, pytest, frontend compilation, static schema version 3 bundle checks, all six variants, and composed dashboardd catalog startup.
+- Released and published Today 0.3.1 at `https://github.com/alexjercan/today/releases/tag/v0.3.1`; its release workflow repeated the complete flake check successfully.
+- After the release, changed the catalog integration check to use `dashboardd-unwrapped`, an empty web root, and only the Today widget root. This retains real server discovery coverage without building dashboardd frontends or built-in widgets.
