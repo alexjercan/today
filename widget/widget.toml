@@ -1,4 +1,4 @@
-schema_version = 2
+schema_version = 3
 id = "today"
 name = "Today"
 description = "Writable daily tasks, habits, nutrition, weight, notes, and planning"

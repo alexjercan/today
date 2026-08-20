@@ -24,17 +24,17 @@
         "rust-flake": "rust-flake"
       },
       "locked": {
-        "lastModified": 1786952968,
-        "narHash": "sha256-vMnFOtdyffZi5WjJ3PBmJUQ/CpdK7fbfG1miCcpvDTU=",
+        "lastModified": 1787259771,
+        "narHash": "sha256-5Gwrq850613KQ5YMaaDN+rsaDm5SPYU/4ZbHVvXaAGE=",
         "owner": "alexjercan",
         "repo": "dashboardd",
-        "rev": "e68a4acdd73b5be73883f4fa435db26a2f16cbab",
+        "rev": "a1d5a0b634e6db7176f3884931612e3fde31480f",
         "type": "github"
       },
       "original": {
         "owner": "alexjercan",
+        "ref": "v0.2.0",
         "repo": "dashboardd",
-        "rev": "e68a4acdd73b5be73883f4fa435db26a2f16cbab",
         "type": "github"
       }
     },

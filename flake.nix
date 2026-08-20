@@ -26,7 +26,7 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
 
     dashboardd = {
-      url = "github:alexjercan/dashboardd/e68a4acdd73b5be73883f4fa435db26a2f16cbab";
+      url = "github:alexjercan/dashboardd/v0.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -81,7 +81,7 @@
           package = pythonSet.today;
         };
 
-        dashboarddWidgetTool = inputs.dashboardd.packages.${system}.dashboardd-widget;
+        dashboarddWidgetTool = inputs.dashboardd.packages.${system}.dashboardd-widget-bundle;
         dashboarddPackage = inputs.dashboardd.packages.${system}.dashboardd;
         macrosPackage = inputs.macros.packages.${system}.default;
         frontendNodeModules = pkgs.importNpmLock.buildNodeModules {
