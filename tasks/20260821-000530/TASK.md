@@ -1,6 +1,7 @@
 # Migrate the Today widget to dashboardd 0.2.0
 
-- STATUS: COMPLETE
+- STATUS: CLOSED
+- PRIORITY: 100
 - TAGS: dashboardd, widget, release, nix
 
 ## Goal
