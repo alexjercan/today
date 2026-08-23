@@ -9,6 +9,16 @@ one line each. Breaking changes are tagged **(breaking)**.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-23
+
+### Added
+
+- Add food database query, calculation, and atomic insertion to `today macros`.
+
+### Changed
+
+- Use Today directly for dashboard food lookup and remove the macros.nvim CLI package dependency.
+
 ## [0.3.1] - 2026-08-21
 
 ### Changed
@@ -54,7 +64,8 @@ tagging.
 - Nix packaging: `nix run .`, a `today` package and a system-agnostic overlay for consumers.
 - `today --version`.
 
-[unreleased]: https://github.com/alexjercan/today/compare/v0.3.1...HEAD
+[unreleased]: https://github.com/alexjercan/today/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/alexjercan/today/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/alexjercan/today/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/alexjercan/today/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/alexjercan/today/releases/tag/v0.2.0

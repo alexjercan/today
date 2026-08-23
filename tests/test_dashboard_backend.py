@@ -23,33 +23,18 @@ def _den(tmp_path: Path) -> Path:
     return den
 
 
-def _macros(tmp_path: Path) -> Path:
-    executable = tmp_path / "macros-fixture"
-    executable.write_text(
-        f"#!{sys.executable}\n"
-        "import json, sys\n"
-        "args = sys.argv[1:]\n"
-        "if args[:1] == ['search']:\n"
-        "    print(json.dumps({'results': ["
-        "{'id': 'egg:pc', 'name': 'egg', 'unit': 'pc'}, "
-        "{'id': 'egg whites:g', 'name': 'egg whites', 'unit': 'g'}]}))\n"
-        "elif args[:1] == ['calculate'] and args[args.index('--food') + 1] == 'egg:pc':\n"
-        "    amount = float(args[args.index('--amount') + 1])\n"
-        "    print(json.dumps({'food': 'egg', 'amount': amount, 'unit': 'pc', "
-        "'protein': 6 * amount, 'carbs': 0, 'fat': 5 * amount}))\n"
-        "else:\n"
-        "    print('Error: Unknown food ID', file=sys.stderr)\n"
-        "    raise SystemExit(1)\n",
-        encoding="utf-8",
+def _macros_database(tmp_path: Path) -> Path:
+    database = tmp_path / "macros.csv"
+    database.write_text(
+        "egg 1pc,6,0,5\negg whites 100g,11,1,0\n", encoding="utf-8"
     )
-    executable.chmod(0o755)
-    return executable
+    return database
 
 
 def _start(tmp_path: Path) -> subprocess.Popen[str]:
     env = dict(os.environ)
     env["DEN_PATH"] = str(_den(tmp_path))
-    env["MACROS_EXECUTABLE"] = str(_macros(tmp_path))
+    env["MACROS_DATABASE"] = str(_macros_database(tmp_path))
     return subprocess.Popen(
         [sys.executable, "-m", "today.dashboard_backend"],
         stdin=subprocess.PIPE,
@@ -176,8 +161,8 @@ def test_backend_searches_and_calculates_food(tmp_path: Path) -> None:
             "kind": "food.search",
             "query": "eg",
             "candidates": [
-                {"id": "egg:pc", "name": "egg", "unit": "pc"},
                 {"id": "egg whites:g", "name": "egg whites", "unit": "g"},
+                {"id": "egg:pc", "name": "egg", "unit": "pc"},
             ],
         },
     }

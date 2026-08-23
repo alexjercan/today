@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from today import __version__, application
+from today import macros as food_database
 from today.model import Day, Habit, Note, Task
 
 DEFAULT_DEN = application.DEFAULT_DEN
@@ -199,16 +200,68 @@ def _cmd_weight(args: argparse.Namespace) -> int:
 
 
 def _cmd_macros(args: argparse.Namespace) -> int:
-    den = resolve_den(args.den)
-    target = _target(args)
-    day, current = application.read_day(den, target)
     action = getattr(args, "maction", None)
     try:
+        if action in {"query", "search"}:
+            database = food_database.Database.load(
+                food_database.resolve_database(args.database)
+            )
+            query = " ".join(args.query)
+            candidates = database.query(query)
+            if getattr(args, "json", False):
+                print(
+                    json.dumps(
+                        {"results": candidates},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
+            else:
+                for candidate in candidates:
+                    print(f"{candidate['name']} {candidate['unit']}")
+            return 0
+        if action == "calculate":
+            database = food_database.Database.load(
+                food_database.resolve_database(args.database)
+            )
+            item = database.calculate(args.food, args.amount)
+            if getattr(args, "json", False):
+                print(
+                    json.dumps(
+                        item.to_dict(), ensure_ascii=False, separators=(",", ":")
+                    )
+                )
+            else:
+                print(item.to_row())
+            return 0
+        if action == "insert":
+            item = food_database.insert(
+                food_database.resolve_database(args.database), args.row
+            )
+            if getattr(args, "json", False):
+                print(
+                    json.dumps(
+                        item.to_dict(), ensure_ascii=False, separators=(",", ":")
+                    )
+                )
+            else:
+                print(item.to_row())
+            return 0
+
+        den = resolve_den(args.den)
+        target = _target(args)
+        day, current = application.read_day(den, target)
         if action == "add":
             day, _revision = application.add_food(den, target, args.row, current)
         elif action == "rm":
             day, _revision = application.remove_food(den, target, args.index, current)
-    except (ValueError, LookupError, IndexError, application.RevisionConflict) as exc:
+    except (
+        OSError,
+        ValueError,
+        LookupError,
+        IndexError,
+        application.RevisionConflict,
+    ) as exc:
         print(f"macros: {exc}", file=sys.stderr)
         return 1
     if getattr(args, "json", False):
@@ -311,18 +364,45 @@ def _add_weight_parser(sub: argparse._SubParsersAction) -> None:
 
 
 def _add_macros_parser(sub: argparse._SubParsersAction) -> None:
-    macros = sub.add_parser("macros", help="add/remove food or show macro totals")
+    macros = sub.add_parser(
+        "macros", help="manage day totals or query the food database"
+    )
     macros.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     macros.set_defaults(func=_cmd_macros)
     actions = macros.add_subparsers(dest="maction")
-    add = actions.add_parser("add", help="append a what,protein,carbs,fat row")
+    add = actions.add_parser("add", help="append a what,protein,carbs,fat day row")
     add.add_argument("row")
     add.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     add.set_defaults(func=_cmd_macros)
-    remove = actions.add_parser("rm", help="remove a valid food row by index")
+    remove = actions.add_parser("rm", help="remove a valid day food row by index")
     remove.add_argument("index", type=int)
     remove.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     remove.set_defaults(func=_cmd_macros)
+
+    query = actions.add_parser(
+        "query", aliases=["search"], help="fuzzy-query the macros.nvim food database"
+    )
+    query.add_argument("query", nargs="+")
+    query.add_argument("--database")
+    query.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    query.set_defaults(func=_cmd_macros)
+    calculate = actions.add_parser(
+        "calculate", help="scale one database food to a quantity"
+    )
+    calculate.add_argument("--food", required=True)
+    calculate.add_argument("--amount", required=True, type=float)
+    calculate.add_argument("--database")
+    calculate.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS
+    )
+    calculate.set_defaults(func=_cmd_macros)
+    insert = actions.add_parser(
+        "insert", help="atomically insert a row into the food database"
+    )
+    insert.add_argument("row")
+    insert.add_argument("--database")
+    insert.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    insert.set_defaults(func=_cmd_macros)
 
 
 def _add_note_parser(sub: argparse._SubParsersAction) -> None:

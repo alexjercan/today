@@ -25,6 +25,9 @@ today --date 2026-08-20 task add "prepare release"
 today habit toggle Gym
 today weight 80
 today macros add "eggs,12,1,10"
+today macros query chick --json
+today macros calculate --food "chicken breast:g" --amount 150 --json
+today macros insert "apple 1pc,0.3,25,0.2" --json
 today note add "idea..." --title project
 today note list --json      # structured #### notes
 today note edit 1 "replacement body"
@@ -38,10 +41,36 @@ today note rm 1
 - Notes are multi-line Markdown blocks delimited by `####` headings.
 - Missing sections read as empty domain defaults.
 
+### Food database commands
+
+`today macros query` provides deterministic, case-insensitive fuzzy search.
+Prefix matches rank first, followed by food ID. `search` is a compatibility
+alias for `query`. Results contain stable IDs, display names, and canonical
+units (`g` or `pc`). `calculate` accepts a selected ID and a positive finite
+quantity, then scales protein, carbohydrates, and fat from the database row.
+`insert` validates and atomically appends one canonical row.
+
+The commands reuse the macros.nvim CSV format:
+
+```csv
+chicken breast 100g,31,0,3.6
+egg 1pc,6,0,5
+```
+
+The database defaults to `~/.local/share/nvim/macros.csv`, which keeps
+macros.nvim as the Neovim data source. Set `MACROS_DATABASE` or pass
+`--database PATH` after `query`, `calculate`, or `insert`. Use `--json` for the
+stable machine contract:
+
+```json
+{"results":[{"id":"chicken breast:g","name":"chicken breast","unit":"g"}]}
+{"food":"chicken breast","amount":150.0,"unit":"g","protein":46.5,"carbs":0.0,"fat":5.4}
+```
+
 ## dashboardd widgets
 
 The flake exports `packages.dashboardd-widget`, an external runtime bundle with
-five writable variants: Tasks, Habits, Macros, Weight, and Upcoming.
+six writable variants: Tasks, Habits, Macros, Weight, Upcoming, and Notes.
 
 ```bash
 nix build .#dashboardd-widget
@@ -60,9 +89,10 @@ lib.makeSearchPath "share/dashboardd/widgets" [
 The Python backend inherits `DEN_PATH`; otherwise it uses
 `~/personal/the-den`. Starting a Today widget ensures the current daily entry
 exists. Dated Upcoming writes create the selected future entry. Macros food
-entry uses the packaged `macros` CLI for fuzzy autocomplete, gram or piece
-quantities, and automatic nutrient calculation. Its database defaults to
-`~/.local/share/nvim/macros.csv`; set `MACROS_DATABASE` to override it.
+entry uses Today's food database implementation for fuzzy autocomplete, gram
+or piece quantities, and automatic nutrient calculation. The widget package
+has no macros.nvim CLI runtime dependency and uses the same `MACROS_DATABASE`
+selection described above.
 
 ## Agent skill
 

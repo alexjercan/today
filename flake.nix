@@ -29,11 +29,6 @@
       url = "github:alexjercan/dashboardd/v0.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    macros = {
-      url = "github:alexjercan/macros.nvim/v0.2.0";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs = inputs @ {
@@ -83,7 +78,6 @@
 
         dashboarddWidgetTool = inputs.dashboardd.packages.${system}.dashboardd-widget-bundle;
         dashboarddServer = inputs.dashboardd.packages.${system}.dashboardd-unwrapped;
-        macrosPackage = inputs.macros.packages.${system}.default;
         frontendNodeModules = pkgs.importNpmLock.buildNodeModules {
           npmRoot = ./widget/frontend;
           nodejs = pkgs.nodejs_22;
@@ -107,7 +101,6 @@
           '';
         };
         widgetBackend = pkgs.writeShellScript "today-dashboardd-widget" ''
-          export MACROS_EXECUTABLE=${macrosPackage}/bin/macros
           exec ${todayApp}/bin/today-dashboardd-widget "$@"
         '';
         todayWidget = pkgs.runCommand "today-dashboardd-widget-0.1.0" {
@@ -177,7 +170,7 @@
             test "$(jq '[.variants[] | select(.id == "notes")][0].width' "$bundle/widget.json")" -eq 3
             test "$(jq '[.variants[] | select(.id == "notes")][0].height' "$bundle/widget.json")" -eq 5
             test -x "$bundle/bin/today"
-            grep -q ${macrosPackage}/bin/macros "$bundle/bin/today"
+            grep -q ${todayApp}/bin/today-dashboardd-widget "$bundle/bin/today"
             touch "$out"
           '';
           widget-catalog = pkgs.runCommand "today-widget-catalog-check" {

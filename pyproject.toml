@@ -1,6 +1,6 @@
 [project]
 name = "today"
-version = "0.3.1"
+version = "0.4.0"
 description = "the-den journal CLI - one command that merges today + daily"
 readme = "README.md"
 authors = [
