@@ -1,58 +1,39 @@
 # AGENTS.md
 
-Global `~/AGENTS.md` applies.
+Global `~/AGENTS.md` applies. This file defines project-specific instructions.
 
 ## Project
 
 - `today` is the only reader and writer for the-den journal Markdown.
 - Bare `today` opens an editor. Agents use non-interactive subcommands.
-- The runtime uses Python 3.13 and the standard library only.
+- The Python 3.13 runtime uses only the standard library.
+- `README.md` defines the CLI. `today/model.py` and golden fixtures define the
+  Markdown format.
 
-## Agent workflow
+## Workflow
 
 - Work directly on `master` unless the user requests an isolated worktree.
-- Use tatr for tracked work. Create a task only when the user requests one.
-- Use one task for one user request and its follow-up work. Create dependent
-  tasks only when the user requests decomposition.
-- Store task records under `tasks/`. See `tasks/EXEMPTIONS.md` for legacy schema
-  exceptions.
-- Keep runnable task-specific examples and evidence with the task. Do not add a
-  top-level examples or scripts directory.
-- Treat `README.md` as the CLI contract. Treat `today/model.py` and golden
-  fixtures as the Markdown format contract.
+- Use Tatr for requested tracked work. Keep one task for one request and its
+  follow-up work.
+- Keep task records and evidence under `tasks/<id>/`. Follow
+  `tasks/EXEMPTIONS.md` for legacy records.
+- Use Sprout only when the user requests an isolated worktree.
+- Keep task-specific examples with the task. Do not add top-level example or
+  script directories.
 - Work offline. New runtime dependencies require user approval.
 
 ## Conventions
 
-- Match real the-den Markdown exactly. Capture real entries as fixtures before
-  parser changes.
-- Mutations use parse -> transform -> atomic write. Never half-write.
+- Match real the-den Markdown. Capture real entries as fixtures before parser
+  changes.
+- Mutate through parse -> transform -> atomic write. Never half-write.
 - Preserve non-interactive `--json` behavior for agent callers.
-- Use type hints for public functions and non-obvious data structures.
-- Use `snake_case` for modules, functions, and variables and `PascalCase` for
-  classes.
-- Format and lint with Ruff. Type-check with mypy.
-- Keep runtime dependencies empty unless the user approves a concrete need.
+- Use type hints for public and non-obvious interfaces. Format and lint with
+  Ruff and type-check with mypy.
 - Add one short Unreleased changelog line for user-visible changes. Skip
   internal refactors, tests, and task records.
-- Put durable rationale and worked examples in `README.md`. Keep transient
-  evidence with the task.
-
-## Verification
-
-Run the relevant checks:
-
-```bash
-ruff check .
-mypy .
-pytest
-nix flake check
-```
-
-## Release
-
-- Keep `pyproject.toml` version equal to `today/__init__.py::__version__`.
-- Promote Unreleased, add a fresh section, and update compare links.
-- Run `nix flake check`, then commit only version and changelog files.
-- Tag `vX.Y.Z`. Push only when requested; release CI publishes the changelog
-  section.
+- Put durable rationale and worked examples in `README.md`.
+- Run the cheapest relevant check. Use focused pytest cases first and
+  `nix flake check` for broad integration.
+- Keep `pyproject.toml` and `today/__init__.py` versions equal during releases.
+  Promote Unreleased, create a fresh section, and push tags only when requested.

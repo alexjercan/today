@@ -1,0 +1,6 @@
+interface:
+  display_name: "Today development"
+  short_description: "Develop and verify the Today CLI"
+  default_prompt: "Use $today-development to change and verify Today behavior."
+policy:
+  allow_implicit_invocation: true
